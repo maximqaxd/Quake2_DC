@@ -20,6 +20,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // r_main.c
 #include "gl_local.h"
 
+#define DEG2RAD(a) ((a) * 0.01745329251994329576923690768489f)
+
+
 void R_Clear (void);
 
 viddef_t	vid;
@@ -162,11 +165,21 @@ qboolean R_CullBox (vec3_t mins, vec3_t maxs)
 
 void R_RotateForEntity (entity_t *e)
 {
-    qglTranslatef (e->origin[0],  e->origin[1],  e->origin[2]);
+    mat4 model_matrix;
+    
+    // Get current modelview matrix state
+    qglGetFloatv(GL_MODELVIEW_MATRIX, (float *)model_matrix);
 
-    qglRotatef (e->angles[1],  0, 0, 1);
-    qglRotatef (-e->angles[0],  0, 1, 0);
-    qglRotatef (-e->angles[2],  1, 0, 0);
+    // Apply transformations in order
+    glm_translate(model_matrix, (vec3){e->origin[0], e->origin[1], e->origin[2]});
+    
+    // Convert to radians and apply rotations 
+    glm_rotate_z(model_matrix, DEG2RAD(e->angles[1]), model_matrix);  // yaw
+    glm_rotate_y(model_matrix, DEG2RAD(-e->angles[0]), model_matrix); // pitch  
+    glm_rotate_x(model_matrix, DEG2RAD(-e->angles[2]), model_matrix); // roll
+
+    // Load the transformed matrix back
+    qglLoadMatrixf((float *)model_matrix);
 }
 
 /*
@@ -283,37 +296,43 @@ R_DrawNullModel
 */
 void R_DrawNullModel (void)
 {
-	vec3_t	shadelight;
-	int		i;
+    vec3_t shadelight;
+    int i;
+    mat4 original_matrix;
 
-	if ( currententity->flags & RF_FULLBRIGHT )
-		shadelight[0] = shadelight[1] = shadelight[2] = 1.0F;
-	else
-		R_LightPoint (currententity->origin, shadelight);
+    if ( currententity->flags & RF_FULLBRIGHT )
+        shadelight[0] = shadelight[1] = shadelight[2] = 1.0F;
+    else
+        R_LightPoint (currententity->origin, shadelight);
 
-    qglPushMatrix ();
-	R_RotateForEntity (currententity);
+    // Save current modelview matrix
+    qglGetFloatv(GL_MODELVIEW_MATRIX, (float *)original_matrix);
+    
+    // Apply entity transforms
+    R_RotateForEntity (currententity);
 
-	qglDisable (GL_TEXTURE_2D);
-	qglColor3fv (shadelight);
+    qglDisable (GL_TEXTURE_2D);
+    qglColor3fv (shadelight);
 
-	qglBegin (GL_TRIANGLE_FAN);
-	qglVertex3f (0, 0, -16);
-	for (i=0 ; i<=4 ; i++)
-		qglVertex3f (16*cos(i*M_PI/2), 16*sin(i*M_PI/2), 0);
-	qglEnd ();
+    qglBegin (GL_TRIANGLE_FAN);
+    qglVertex3f (0, 0, -16);
+    for (i=0 ; i<=4 ; i++)
+        qglVertex3f (16*cos(i*M_PI/2), 16*sin(i*M_PI/2), 0);
+    qglEnd ();
 
-	qglBegin (GL_TRIANGLE_FAN);
-	qglVertex3f (0, 0, 16);
-	for (i=4 ; i>=0 ; i--)
-		qglVertex3f (16*cos(i*M_PI/2), 16*sin(i*M_PI/2), 0);
-	qglEnd ();
+    qglBegin (GL_TRIANGLE_FAN);
+    qglVertex3f (0, 0, 16);
+    for (i=4 ; i>=0 ; i--)
+        qglVertex3f (16*cos(i*M_PI/2), 16*sin(i*M_PI/2), 0);
+    qglEnd ();
 
-	qglColor3f (1,1,1);
-	qglPopMatrix ();
-	qglEnable (GL_TEXTURE_2D);
+    qglColor3f (1,1,1);
+    
+    // Restore original matrix
+    qglLoadMatrixf((float *)original_matrix);
+    
+    qglEnable (GL_TEXTURE_2D);
 }
-
 /*
 =============
 R_DrawEntitiesOnList
@@ -566,46 +585,34 @@ int SignbitsForPlane (cplane_t *out)
 }
 
 
-void R_SetFrustum (void)
-{
-	int		i;
+void R_SetFrustum(void) {
+  int i;
 
-#if 0
-	/*
-	** this code is wrong, since it presume a 90 degree FOV both in the
-	** horizontal and vertical plane
-	*/
-	// front side is visible
-	VectorAdd (vpn, vright, frustum[0].normal);
-	VectorSubtract (vpn, vright, frustum[1].normal);
-	VectorAdd (vpn, vup, frustum[2].normal);
-	VectorSubtract (vpn, vup, frustum[3].normal);
+  if (r_newrefdef.fov_x == 90) {
+    // front side is visible
 
-	// we theoretically don't need to normalize these vectors, but I do it
-	// anyway so that debugging is a little easier
-	VectorNormalize( frustum[0].normal );
-	VectorNormalize( frustum[1].normal );
-	VectorNormalize( frustum[2].normal );
-	VectorNormalize( frustum[3].normal );
-#else
-	// rotate VPN right by FOV_X/2 degrees
-	RotatePointAroundVector( frustum[0].normal, vup, vpn, -(90-r_newrefdef.fov_x / 2 ) );
-	// rotate VPN left by FOV_X/2 degrees
-	RotatePointAroundVector( frustum[1].normal, vup, vpn, 90-r_newrefdef.fov_x / 2 );
-	// rotate VPN up by FOV_X/2 degrees
-	RotatePointAroundVector( frustum[2].normal, vright, vpn, 90-r_newrefdef.fov_y / 2 );
-	// rotate VPN down by FOV_X/2 degrees
-	RotatePointAroundVector( frustum[3].normal, vright, vpn, -( 90 - r_newrefdef.fov_y / 2 ) );
-#endif
+    VectorAdd(vpn, vright, frustum[0].normal);
+    VectorSubtract(vpn, vright, frustum[1].normal);
 
-	for (i=0 ; i<4 ; i++)
-	{
-		frustum[i].type = PLANE_ANYZ;
-		frustum[i].dist = DotProduct (r_origin, frustum[i].normal);
-		frustum[i].signbits = SignbitsForPlane (&frustum[i]);
-	}
+    VectorAdd(vpn, vup, frustum[2].normal);
+    VectorSubtract(vpn, vup, frustum[3].normal);
+  } else {
+    // rotate VPN right by FOV_X/2 degrees
+    RotatePointAroundVector(frustum[0].normal, vup, vpn, -(90 - r_newrefdef.fov_x * 0.5f));
+    // rotate VPN left by FOV_X/2 degrees
+    RotatePointAroundVector(frustum[1].normal, vup, vpn, 90 - r_newrefdef.fov_x * 0.5f);
+    // rotate VPN up by FOV_X/2 degrees
+    RotatePointAroundVector(frustum[2].normal, vright, vpn, 90 - r_newrefdef.fov_y * 0.5f);
+    // rotate VPN down by FOV_X/2 degrees
+    RotatePointAroundVector(frustum[3].normal, vright, vpn, -(90 - r_newrefdef.fov_y * 0.5f));
+  }
+
+  for (i = 0; i < 4; i++) {
+    frustum[i].type = PLANE_ANYZ;
+    frustum[i].dist = DotProduct(r_origin, frustum[i].normal);
+    frustum[i].signbits = SignbitsForPlane(&frustum[i]);
+  }
 }
-
 //=======================================================================
 
 /*
@@ -665,6 +672,7 @@ void R_SetupFrame (void)
 	c_alias_polys = 0;
 
 	// clear out the portion of the screen that the NOWORLDMODEL defines
+	/* GL_Scissor_TEST does not work with gldc.. I think 
 	if ( r_newrefdef.rdflags & RDF_NOWORLDMODEL )
 	{
 		qglEnable( GL_SCISSOR_TEST );
@@ -673,7 +681,8 @@ void R_SetupFrame (void)
 		qglClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 		qglClearColor( 1, 0, 0.5, 0.5 );
 		qglDisable( GL_SCISSOR_TEST );
-	}
+	} 
+	*/ 
 }
 
 
@@ -702,62 +711,61 @@ R_SetupGL
 */
 void R_SetupGL (void)
 {
-	float	screenaspect;
-//	float	yfov;
-	int		x, x2, y2, y, w, h;
+    float screenaspect;
+    int x, x2, y2, y, w, h;
 
-	//
-	// set up viewport
-	//
-	x = floor(r_newrefdef.x * vid.width / vid.width);
-	x2 = ceil((r_newrefdef.x + r_newrefdef.width) * vid.width / vid.width);
-	y = floor(vid.height - r_newrefdef.y * vid.height / vid.height);
-	y2 = ceil(vid.height - (r_newrefdef.y + r_newrefdef.height) * vid.height / vid.height);
+    // Set up viewport
+    x = floor(r_newrefdef.x * vid.width / vid.width);
+    x2 = ceil((r_newrefdef.x + r_newrefdef.width) * vid.width / vid.width);
+    y = floor(vid.height - r_newrefdef.y * vid.height / vid.height);
+    y2 = ceil(vid.height - (r_newrefdef.y + r_newrefdef.height) * vid.height / vid.height);
 
-	w = x2 - x;
-	h = y - y2;
+    // NuQuake viewport adjustments
+    if (x > 0) x--;
+    if (x2 < vid.width) x2++;
+    if (y2 < 0) y2--;
+    if (y < vid.height) y++;
 
-	qglViewport (x, y2, w, h);
+    w = x2 - x;
+    h = y - y2;
 
-	//
-	// set up projection matrix
-	//
+    qglViewport (x, y2, w, h);
+
+    // Set up projection
     screenaspect = (float)r_newrefdef.width/r_newrefdef.height;
-//	yfov = 2*atan((float)r_newrefdef.height/r_newrefdef.width)*180/M_PI;
-	qglMatrixMode(GL_PROJECTION);
+    qglMatrixMode(GL_PROJECTION);
     qglLoadIdentity ();
-    MYgluPerspective (r_newrefdef.fov_y,  screenaspect,  4,  4096);
+    MYgluPerspective (r_newrefdef.fov_y, screenaspect, 4, 4096);
 
-	qglCullFace(GL_FRONT);
+    qglCullFace(GL_FRONT);
 
-	qglMatrixMode(GL_MODELVIEW);
+    qglMatrixMode(GL_MODELVIEW);
     qglLoadIdentity ();
 
-    qglRotatef (-90,  1, 0, 0);	    // put Z going up
-    qglRotatef (90,  0, 0, 1);	    // put Z going up
-    qglRotatef (-r_newrefdef.viewangles[2],  1, 0, 0);
-    qglRotatef (-r_newrefdef.viewangles[0],  0, 1, 0);
-    qglRotatef (-r_newrefdef.viewangles[1],  0, 0, 1);
-    qglTranslatef (-r_newrefdef.vieworg[0],  -r_newrefdef.vieworg[1],  -r_newrefdef.vieworg[2]);
+    // Use GLM for transformations
+    mat4 model_temp = GLM_MAT4_IDENTITY_INIT;
 
-//	if ( gl_state.camera_separation != 0 && gl_state.stereo_enabled )
-//		qglTranslatef ( gl_state.camera_separation, 0, 0 );
+    glm_rotate_x(model_temp, DEG2RAD(-90.0f), model_temp);  // put Z going up
+    glm_rotate_z(model_temp, DEG2RAD(90), model_temp);      // put Z going up
 
-	qglGetFloatv (GL_MODELVIEW_MATRIX, r_world_matrix);
+    glm_rotate_x(model_temp, DEG2RAD(-r_newrefdef.viewangles[2]), model_temp);
+    glm_rotate_y(model_temp, DEG2RAD(-r_newrefdef.viewangles[0]), model_temp);
+    glm_rotate_z(model_temp, DEG2RAD(-r_newrefdef.viewangles[1]), model_temp);
 
-	//
-	// set drawing parms
-	//
-	if (gl_cull->value)
-		qglEnable(GL_CULL_FACE);
-	else
-		qglDisable(GL_CULL_FACE);
+    glm_translate(model_temp, (vec3){-r_newrefdef.vieworg[0], 
+                                   -r_newrefdef.vieworg[1], 
+                                   -r_newrefdef.vieworg[2]});
 
-	qglDisable(GL_BLEND);
-	qglDisable(GL_ALPHA_TEST);
-	qglEnable(GL_DEPTH_TEST);
+    qglLoadMatrixf((float *)model_temp);
+
+    if (gl_cull->value)
+        qglEnable(GL_CULL_FACE);
+    else
+        qglDisable(GL_CULL_FACE);
+
+    qglDisable(GL_BLEND);
+    qglEnable(GL_DEPTH_TEST);
 }
-
 /*
 =============
 R_Clear
@@ -842,9 +850,11 @@ void R_RenderView (refdef_t *fd)
 
 	R_MarkLeaves ();	// done here so we know if we're in water
 
+
+	R_DrawEntitiesOnList ();  // Order matters here.. May of fucked up.
+
 	R_DrawWorld ();
 
-	R_DrawEntitiesOnList ();
 
 	R_RenderDlights ();
 
@@ -874,13 +884,15 @@ void	R_SetGL2D (void)
 	qglOrtho  (0, vid.width, vid.height, 0, -99999, 99999);
 	qglMatrixMode(GL_MODELVIEW);
     qglLoadIdentity ();
-	qglDisable (GL_DEPTH_TEST);
+	qglDepthMask(GL_FALSE);  // This is what we need for GLdc was 	qglDisable (GL_DEPTH_TEST);
 	qglDisable (GL_CULL_FACE);
+	
 	qglDisable (GL_BLEND);
 	qglEnable (GL_ALPHA_TEST);
 	qglColor4f (1,1,1,1);
 }
 
+// Wtf is this shit.. can remove most likely.. 
 static void GL_DrawColoredStereoLinePair( float r, float g, float b, float y )
 {
 	qglColor3f( r, g, b );
@@ -907,7 +919,7 @@ static void GL_DrawStereoPattern( void )
 
 	for ( i = 0; i < 20; i++ )
 	{
-		qglBegin( GL_LINES );
+		qglBegin( GL_LINES );  
 			GL_DrawColoredStereoLinePair( 1, 0, 0, 0 );
 			GL_DrawColoredStereoLinePair( 1, 0, 0, 2 );
 			GL_DrawColoredStereoLinePair( 1, 0, 0, 4 );
