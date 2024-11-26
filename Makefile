@@ -8,7 +8,7 @@ all: $(TARGET)
 include $(KOS_BASE)/Makefile.rules
 
 # Check if GL is enabled
-GL ?= 0
+GL ?= 1
 
 # Directory definitions
 BUILDDIR = build

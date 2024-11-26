@@ -205,6 +205,7 @@ void GL_SetDefaultState( void )
 
 	GL_TexEnv( GL_REPLACE );
 
+	/*  No GL_Point Smooth. figure out later. 
 	if ( qglPointParameterfEXT )
 	{
 		float attenuations[3];
@@ -218,6 +219,7 @@ void GL_SetDefaultState( void )
 		qglPointParameterfEXT( GL_POINT_SIZE_MAX_EXT, gl_particle_max_size->value );
 		qglPointParameterfvEXT( GL_DISTANCE_ATTENUATION_EXT, attenuations );
 	}
+	*/ 
 
 	if ( qglColorTableEXT && gl_ext_palettedtexture->value )
 	{
