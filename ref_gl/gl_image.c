@@ -123,7 +123,8 @@ void GL_TexEnv( GLenum mode )
 }
 
 void GL_Bind (int texnum)
-{
+{ // Comment out for now.. some textures like colormap.pcx do not use this. 
+	/* 
 	extern	image_t	*draw_chars;
 
 	if (gl_nobind->value && draw_chars)		// performance evaluation option
@@ -132,6 +133,7 @@ void GL_Bind (int texnum)
 		return;
 	gl_state.currenttextures[gl_state.currenttmu] = texnum;
 	qglBindTexture (GL_TEXTURE_2D, texnum);
+	*/ 
 }
 
 void GL_MBind( GLenum target, int texnum )
