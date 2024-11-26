@@ -851,10 +851,10 @@ void R_RenderView (refdef_t *fd)
 	R_MarkLeaves ();	// done here so we know if we're in water
 
 
-	R_DrawEntitiesOnList ();  // Order matters here.. May of fucked up.
 
 	R_DrawWorld ();
 
+	R_DrawEntitiesOnList ();  // Order matters here.. May of fucked up.
 
 	R_RenderDlights ();
 

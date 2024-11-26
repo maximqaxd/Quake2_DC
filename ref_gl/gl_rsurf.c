@@ -628,7 +628,7 @@ void R_DrawAlphaSurfaces (void)
 ================
 DrawTextureChains
 ================
-*/
+*/ /*   Some issue here I need to figure out.. for now i'll hack together an alternative
 void DrawTextureChains (void)
 {
 	int		i;
@@ -695,6 +695,64 @@ void DrawTextureChains (void)
 
 	GL_TexEnv( GL_REPLACE );
 }
+
+*/
+
+
+
+
+void DrawTextureChains (void)
+{
+    int i;
+    msurface_t *s;
+    image_t *image;
+
+    c_visible_textures = 0;
+    qglDisable(GL_TEXTURE_2D);
+
+    // Simple version without multitexture
+    for (i = 0, image=gltextures; i<numgltextures; i++, image++)
+    {
+        if (!image->registration_sequence)
+            continue;
+        s = image->texturechain;
+        if (!s)
+            continue;
+        c_visible_textures++;
+
+        for (; s; s=s->texturechain)
+        {
+            // Generate a unique color based on surface properties
+            float r = (float)((s->lightmaptexturenum * 7 + 1) % 255) / 255.0f;
+            float g = (float)((s->light_s * 13 + 3) % 255) / 255.0f;
+            float b = (float)((s->light_t * 17 + 5) % 255) / 255.0f;
+            
+            // Make colors brighter and more distinguishable
+            r = 0.3f + (r * 0.7f);
+            g = 0.3f + (g * 0.7f);
+            b = 0.3f + (b * 0.7f);
+
+            qglColor3f(r, g, b);
+
+            // Special handling for water surfaces
+            if (s->flags & SURF_DRAWTURB)
+            {
+                qglColor3f(0.2f, 0.5f, 0.8f);  // Water is always blue
+            }
+
+            R_RenderBrushPoly(s);
+        }
+
+        image->texturechain = NULL;
+    }
+
+    // Reset state
+    qglEnable(GL_TEXTURE_2D);
+    qglColor3f(1,1,1);
+	
+}
+
+
 
 
 static void GL_RenderLightmappedPoly( msurface_t *surf )
@@ -1191,6 +1249,7 @@ void R_RecursiveWorldNode (mnode_t *node)
 R_DrawWorld
 =============
 */
+/*
 void R_DrawWorld (void)
 {
 	entity_t	ent;
@@ -1238,10 +1297,10 @@ void R_DrawWorld (void)
 		R_RecursiveWorldNode (r_worldmodel->nodes);
 	}
 
-	/*
-	** theoretically nothing should happen in the next two functions
-	** if multitexture is enabled
-	*/
+	
+//	** theoretically nothing should happen in the next two functions
+//	** if multitexture is enabled
+	
 	DrawTextureChains ();
 	R_BlendLightmaps ();
 	
@@ -1249,7 +1308,44 @@ void R_DrawWorld (void)
 
 	R_DrawTriangleOutlines ();
 }
+*/
 
+
+void R_DrawWorld (void)
+{
+    entity_t ent;
+    
+    if (!r_worldmodel || !r_drawworld->value || (r_newrefdef.rdflags & RDF_NOWORLDMODEL))
+        return;
+
+    currentmodel = r_worldmodel;
+    VectorCopy(r_newrefdef.vieworg, modelorg);
+
+    memset(&ent, 0, sizeof(ent));
+    ent.frame = (int)(r_newrefdef.time*2);
+    currententity = &ent;
+
+    gl_state.currenttextures[0] = gl_state.currenttextures[1] = -1;
+
+    qglColor3f(1,1,1);
+    memset(gl_lms.lightmap_surfaces, 0, sizeof(gl_lms.lightmap_surfaces));
+    R_ClearSkyBox();
+    
+    qglEnable(GL_DEPTH_TEST);
+    qglDepthMask(GL_TRUE);
+    qglEnable(GL_CULL_FACE);
+    qglEnable(GL_TEXTURE_2D);
+    
+    R_RecursiveWorldNode(r_worldmodel->nodes);
+
+    DrawTextureChains();
+   // R_BlendLightmaps();
+    
+    //R_DrawSkyBox();
+    // R_DrawTriangleOutlines();
+		//qglDisable(GL_TEXTURE_2D);  Bruce - Enable disable.. for textures.. 
+
+}
 
 /*
 ===============
