@@ -73,7 +73,8 @@ void R_RenderDlight (dlight_t *light)
 =============
 R_RenderDlights
 =============
-*/
+*/   // This is an issue on the dreamcast. Ian Fixed this with nuquake so look at that. 
+// https://github.com/ianmicheal/nuquake_enhanced/blob/a4ede7a7d76ac5e8081baaa790e5ecdea861534b/src/renderer/gl_rlight.c#L79
 void R_RenderDlights (void)
 {
 	int		i;
