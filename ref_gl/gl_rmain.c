@@ -851,10 +851,10 @@ void R_RenderView (refdef_t *fd)
 	R_MarkLeaves ();	// done here so we know if we're in water
 
 
+	R_DrawEntitiesOnList ();  // Order matters here.. May of fucked up.
 
 	R_DrawWorld ();
 
-	R_DrawEntitiesOnList ();  // Order matters here.. May of fucked up.
 
 	R_RenderDlights ();
 
@@ -1047,7 +1047,7 @@ void R_Register( void )
     // Shows triangle wireframes when enabled
     gl_showtris = ri.Cvar_Get ("gl_showtris", "0", 0);
     // Z-buffer rendering optimization
-    gl_ztrick = ri.Cvar_Get ("gl_ztrick", "1", 0);
+    gl_ztrick = ri.Cvar_Get ("gl_ztrick", "0", 0);
     // Forces GPU to finish rendering before continuing
     gl_finish = ri.Cvar_Get ("gl_finish", "0", CVAR_ARCHIVE);
     // Clears the screen each frame
@@ -1061,7 +1061,7 @@ void R_Register( void )
     // Player model texture quality reduction
     gl_playermip = ri.Cvar_Get ("gl_playermip", "0", 0);
     // Forces monochrome lightmaps
-    gl_monolightmap = ri.Cvar_Get( "gl_monolightmap", "0", 0 );
+    gl_monolightmap = ri.Cvar_Get( "gl_monolightmap", "1", 0 );
     // OpenGL driver selection
     gl_driver = ri.Cvar_Get( "gl_driver", "opengl32", CVAR_ARCHIVE );
     // Texture filtering mode
