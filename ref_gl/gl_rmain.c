@@ -987,79 +987,123 @@ void R_RenderFrame (refdef_t *fd)
 
 void R_Register( void )
 {
-	r_lefthand = ri.Cvar_Get( "hand", "0", CVAR_USERINFO | CVAR_ARCHIVE );
-	r_norefresh = ri.Cvar_Get ("r_norefresh", "0", 0);
-	r_fullbright = ri.Cvar_Get ("r_fullbright", "0", 0);
-	r_drawentities = ri.Cvar_Get ("r_drawentities", "1", 0);
-	r_drawworld = ri.Cvar_Get ("r_drawworld", "1", 0);
-	r_novis = ri.Cvar_Get ("r_novis", "0", 0);
-	r_nocull = ri.Cvar_Get ("r_nocull", "0", 0);
-	r_lerpmodels = ri.Cvar_Get ("r_lerpmodels", "1", 0);
-	r_speeds = ri.Cvar_Get ("r_speeds", "0", 0);
+    // Controls which hand the weapon appears in (0 = right, 1 = left)
+    r_lefthand = ri.Cvar_Get( "hand", "0", CVAR_USERINFO | CVAR_ARCHIVE );
+    // Disables screen refreshing when set to 1
+    r_norefresh = ri.Cvar_Get ("r_norefresh", "0", 0);
+    // Makes all surfaces fully bright, ignoring lighting when set to 1
+    r_fullbright = ri.Cvar_Get ("r_fullbright", "0", 0);
+    // Toggles rendering of entities (players, items, etc.)
+    r_drawentities = ri.Cvar_Get ("r_drawentities", "1", 0);
+    // Toggles rendering of the world/level geometry
+    r_drawworld = ri.Cvar_Get ("r_drawworld", "1", 0);
+    // Disables visibility culling when set to 1
+    r_novis = ri.Cvar_Get ("r_novis", "0", 0);
+    // Disables frustum culling when set to 1
+    r_nocull = ri.Cvar_Get ("r_nocull", "0", 0);
+    // Enables model interpolation for smoother animation
+    r_lerpmodels = ri.Cvar_Get ("r_lerpmodels", "1", 0);
+    // Shows rendering performance statistics when enabled
+    r_speeds = ri.Cvar_Get ("r_speeds", "0", 0);
 
-	r_lightlevel = ri.Cvar_Get ("r_lightlevel", "0", 0);
+    // Controls the global light level multiplier
+    r_lightlevel = ri.Cvar_Get ("r_lightlevel", "0", 0);
 
-	gl_nosubimage = ri.Cvar_Get( "gl_nosubimage", "0", 0 );
-	gl_allow_software = ri.Cvar_Get( "gl_allow_software", "0", 0 );
+    // Disables texture subimage updates when set to 1
+    gl_nosubimage = ri.Cvar_Get( "gl_nosubimage", "0", 0 );
+    // Allows fallback to software rendering
+    gl_allow_software = ri.Cvar_Get( "gl_allow_software", "0", 0 );
 
-	gl_particle_min_size = ri.Cvar_Get( "gl_particle_min_size", "2", CVAR_ARCHIVE );
-	gl_particle_max_size = ri.Cvar_Get( "gl_particle_max_size", "40", CVAR_ARCHIVE );
-	gl_particle_size = ri.Cvar_Get( "gl_particle_size", "40", CVAR_ARCHIVE );
-	gl_particle_att_a = ri.Cvar_Get( "gl_particle_att_a", "0.01", CVAR_ARCHIVE );
-	gl_particle_att_b = ri.Cvar_Get( "gl_particle_att_b", "0.0", CVAR_ARCHIVE );
-	gl_particle_att_c = ri.Cvar_Get( "gl_particle_att_c", "0.01", CVAR_ARCHIVE );
+    // Particle system configuration
+    gl_particle_min_size = ri.Cvar_Get( "gl_particle_min_size", "2", CVAR_ARCHIVE );
+    gl_particle_max_size = ri.Cvar_Get( "gl_particle_max_size", "40", CVAR_ARCHIVE );
+    gl_particle_size = ri.Cvar_Get( "gl_particle_size", "40", CVAR_ARCHIVE );
+    gl_particle_att_a = ri.Cvar_Get( "gl_particle_att_a", "0.01", CVAR_ARCHIVE );
+    gl_particle_att_b = ri.Cvar_Get( "gl_particle_att_b", "0.0", CVAR_ARCHIVE );
+    gl_particle_att_c = ri.Cvar_Get( "gl_particle_att_c", "0.01", CVAR_ARCHIVE );
 
-	gl_modulate = ri.Cvar_Get ("gl_modulate", "1", CVAR_ARCHIVE );
-	gl_log = ri.Cvar_Get( "gl_log", "0", 0 );
-	gl_bitdepth = ri.Cvar_Get( "gl_bitdepth", "0", 0 );
-	gl_mode = ri.Cvar_Get( "gl_mode", "3", CVAR_ARCHIVE );
-	gl_lightmap = ri.Cvar_Get ("gl_lightmap", "0", 0);  // Show lightmap no textures.. lol.
-	gl_shadows = ri.Cvar_Get ("gl_shadows", "0", CVAR_ARCHIVE );
-	gl_dynamic = ri.Cvar_Get ("gl_dynamic", "1", 0);
-	gl_nobind = ri.Cvar_Get ("gl_nobind", "0", 0);
-	gl_round_down = ri.Cvar_Get ("gl_round_down", "1", 0);
-	gl_picmip = ri.Cvar_Get ("gl_picmip", "0", 0);
-	gl_skymip = ri.Cvar_Get ("gl_skymip", "0", 0);
-	gl_showtris = ri.Cvar_Get ("gl_showtris", "0", 0);
-	gl_ztrick = ri.Cvar_Get ("gl_ztrick", "0", 0);
-	gl_finish = ri.Cvar_Get ("gl_finish", "0", CVAR_ARCHIVE);
-	gl_clear = ri.Cvar_Get ("gl_clear", "0", 0);
-	gl_cull = ri.Cvar_Get ("gl_cull", "1", 0);
-	gl_polyblend = ri.Cvar_Get ("gl_polyblend", "1", 0);
-	gl_flashblend = ri.Cvar_Get ("gl_flashblend", "0", 0);  // Ok need to investigate this... Stops the texture moving shit.
-	gl_playermip = ri.Cvar_Get ("gl_playermip", "0", 0);
-	gl_monolightmap = ri.Cvar_Get( "gl_monolightmap", "0", 0 );
-	gl_driver = ri.Cvar_Get( "gl_driver", "opengl32", CVAR_ARCHIVE );
-	gl_texturemode = ri.Cvar_Get( "gl_texturemode", "GL_LINEAR_MIPMAP_NEAREST", CVAR_ARCHIVE );
-	gl_texturealphamode = ri.Cvar_Get( "gl_texturealphamode", "default", CVAR_ARCHIVE );
-	gl_texturesolidmode = ri.Cvar_Get( "gl_texturesolidmode", "default", CVAR_ARCHIVE );
-	gl_lockpvs = ri.Cvar_Get( "gl_lockpvs", "0", 0 );
+    // Light intensity multiplier
+    gl_modulate = ri.Cvar_Get ("gl_modulate", "1", CVAR_ARCHIVE );
+    // Enables OpenGL debug logging
+    gl_log = ri.Cvar_Get( "gl_log", "0", 0 );
+    // Color depth setting
+    gl_bitdepth = ri.Cvar_Get( "gl_bitdepth", "0", 0 );
+    // Video mode/resolution setting
+    gl_mode = ri.Cvar_Get( "gl_mode", "3", CVAR_ARCHIVE );
+    // Shows only lightmaps without textures when enabled
+    gl_lightmap = ri.Cvar_Get ("gl_lightmap", "0", 0);
+    // Enables entity shadow rendering
+    gl_shadows = ri.Cvar_Get ("gl_shadows", "1", CVAR_ARCHIVE );
+    // Enables dynamic lighting
+    gl_dynamic = ri.Cvar_Get ("gl_dynamic", "1", 0);
+    // Disables texture binding (debug feature)
+    gl_nobind = ri.Cvar_Get ("gl_nobind", "0", 0);
+    // Rounds texture dimensions down to nearest power of 2
+    gl_round_down = ri.Cvar_Get ("gl_round_down", "1", 0);
+    // Texture quality reduction level
+    gl_picmip = ri.Cvar_Get ("gl_picmip", "0", 0);
+    // Skybox texture mipmap level
+    gl_skymip = ri.Cvar_Get ("gl_skymip", "0", 0);
+    // Shows triangle wireframes when enabled
+    gl_showtris = ri.Cvar_Get ("gl_showtris", "0", 0);
+    // Z-buffer rendering optimization
+    gl_ztrick = ri.Cvar_Get ("gl_ztrick", "1", 0);
+    // Forces GPU to finish rendering before continuing
+    gl_finish = ri.Cvar_Get ("gl_finish", "0", CVAR_ARCHIVE);
+    // Clears the screen each frame
+    gl_clear = ri.Cvar_Get ("gl_clear", "0", 0);
+    // Enables backface culling
+    gl_cull = ri.Cvar_Get ("gl_cull", "1", 0);
+    // Enables screen blending effects
+    gl_polyblend = ri.Cvar_Get ("gl_polyblend", "1", 0);
+    // Controls flash lighting effects
+    gl_flashblend = ri.Cvar_Get ("gl_flashblend", "1", 0);  // Need to fix this. Enabled for now.
+    // Player model texture quality reduction
+    gl_playermip = ri.Cvar_Get ("gl_playermip", "0", 0);
+    // Forces monochrome lightmaps
+    gl_monolightmap = ri.Cvar_Get( "gl_monolightmap", "0", 0 );
+    // OpenGL driver selection
+    gl_driver = ri.Cvar_Get( "gl_driver", "opengl32", CVAR_ARCHIVE );
+    // Texture filtering mode
+    gl_texturemode = ri.Cvar_Get( "gl_texturemode", "GL_LINEAR_MIPMAP_NEAREST", CVAR_ARCHIVE );
+    // Alpha texture mode
+    gl_texturealphamode = ri.Cvar_Get( "gl_texturealphamode", "default", CVAR_ARCHIVE );
+    // Solid texture mode
+    gl_texturesolidmode = ri.Cvar_Get( "gl_texturesolidmode", "default", CVAR_ARCHIVE );
+    // Locks the current PVS (Potentially Visible Set)
+    gl_lockpvs = ri.Cvar_Get( "gl_lockpvs", "0", 0 );
 
-	gl_vertex_arrays = ri.Cvar_Get( "gl_vertex_arrays", "0", CVAR_ARCHIVE );
+    // Enables vertex array rendering
+    gl_vertex_arrays = ri.Cvar_Get( "gl_vertex_arrays", "0", CVAR_ARCHIVE );
 
-	gl_ext_swapinterval = ri.Cvar_Get( "gl_ext_swapinterval", "1", CVAR_ARCHIVE );
-	gl_ext_palettedtexture = ri.Cvar_Get( "gl_ext_palettedtexture", "1", CVAR_ARCHIVE );
-	gl_ext_multitexture = ri.Cvar_Get( "gl_ext_multitexture", "1", CVAR_ARCHIVE );  // Doesn't seem to break shit but need to look into. 
-	gl_ext_pointparameters = ri.Cvar_Get( "gl_ext_pointparameters", "1", CVAR_ARCHIVE );
-	gl_ext_compiled_vertex_array = ri.Cvar_Get( "gl_ext_compiled_vertex_array", "1", CVAR_ARCHIVE );
+    // OpenGL extension toggles
+    gl_ext_swapinterval = ri.Cvar_Get( "gl_ext_swapinterval", "1", CVAR_ARCHIVE );
+    gl_ext_palettedtexture = ri.Cvar_Get( "gl_ext_palettedtexture", "1", CVAR_ARCHIVE );
+    gl_ext_multitexture = ri.Cvar_Get( "gl_ext_multitexture", "1", CVAR_ARCHIVE );
+    gl_ext_pointparameters = ri.Cvar_Get( "gl_ext_pointparameters", "1", CVAR_ARCHIVE );
+    gl_ext_compiled_vertex_array = ri.Cvar_Get( "gl_ext_compiled_vertex_array", "1", CVAR_ARCHIVE );
 
-	gl_drawbuffer = ri.Cvar_Get( "gl_drawbuffer", "GL_BACK", 0 );
-	gl_swapinterval = ri.Cvar_Get( "gl_swapinterval", "1", CVAR_ARCHIVE );
+    // OpenGL buffer and sync settings
+    gl_drawbuffer = ri.Cvar_Get( "gl_drawbuffer", "GL_BACK", 0 );
+    gl_swapinterval = ri.Cvar_Get( "gl_swapinterval", "1", CVAR_ARCHIVE );
 
-	gl_saturatelighting = ri.Cvar_Get( "gl_saturatelighting", "0", 0 );
+    // Lighting saturation control
+    gl_saturatelighting = ri.Cvar_Get( "gl_saturatelighting", "0", 0 );
 
-	gl_3dlabs_broken = ri.Cvar_Get( "gl_3dlabs_broken", "1", CVAR_ARCHIVE );
+    // Workaround for 3DLabs graphics cards
+    gl_3dlabs_broken = ri.Cvar_Get( "gl_3dlabs_broken", "1", CVAR_ARCHIVE );
 
-	vid_fullscreen = ri.Cvar_Get( "vid_fullscreen", "0", CVAR_ARCHIVE );
-	vid_gamma = ri.Cvar_Get( "vid_gamma", "1.0", CVAR_ARCHIVE );
-	vid_ref = ri.Cvar_Get( "vid_ref", "soft", CVAR_ARCHIVE );
+    // Video settings
+    vid_fullscreen = ri.Cvar_Get( "vid_fullscreen", "0", CVAR_ARCHIVE );
+    vid_gamma = ri.Cvar_Get( "vid_gamma", "1.0", CVAR_ARCHIVE );
+    vid_ref = ri.Cvar_Get( "vid_ref", "soft", CVAR_ARCHIVE );
 
-	ri.Cmd_AddCommand( "imagelist", GL_ImageList_f );
-	ri.Cmd_AddCommand( "screenshot", GL_ScreenShot_f );
-	ri.Cmd_AddCommand( "modellist", Mod_Modellist_f );
-	ri.Cmd_AddCommand( "gl_strings", GL_Strings_f );
+    // Register console commands
+    ri.Cmd_AddCommand( "imagelist", GL_ImageList_f );     // Lists loaded images
+    ri.Cmd_AddCommand( "screenshot", GL_ScreenShot_f );   // Takes a screenshot
+    ri.Cmd_AddCommand( "modellist", Mod_Modellist_f );    // Lists loaded models
+    ri.Cmd_AddCommand( "gl_strings", GL_Strings_f );      // Shows OpenGL driver info
 }
-
 /*
 ==================
 R_SetMode
