@@ -122,20 +122,53 @@ void GL_TexEnv( GLenum mode )
 	}
 }
 
-void GL_Bind (int texnum)
-{ // Comment out for now.. some textures like colormap.pcx do not use this. 
-	/* 
-	extern	image_t	*draw_chars;
-
-	if (gl_nobind->value && draw_chars)		// performance evaluation option
-		texnum = draw_chars->texnum;
-	if ( gl_state.currenttextures[gl_state.currenttmu] == texnum)
-		return;
-	gl_state.currenttextures[gl_state.currenttmu] = texnum;
-	qglBindTexture (GL_TEXTURE_2D, texnum);
-	*/ 
+void GL_Bind(int texnum) 
+{ 
+    extern image_t *draw_chars;
+    static GLuint base_texture = 0;
+    static int initialized = 0;
+    static int texture_count = 0;
+    static int total_texture_memory = 0;
+    #define MAX_DC_TEXTURES 400
+    static GLuint texture_map[MAX_DC_TEXTURES] = {0};
+    
+    if(!initialized) {
+        glGenTextures(1, &base_texture);
+        initialized = 1;
+    }
+    
+    if(texnum == 0) {
+        return;
+    }
+    
+    int map_index = (texnum % MAX_DC_TEXTURES);
+    if(!texture_map[map_index]) {
+        GLuint new_tex;
+        glGenTextures(1, &new_tex);
+        texture_map[map_index] = new_tex;
+        texture_count++;
+        
+        // Assuming 128x128 textures, 4 bytes per pixel
+        int tex_size = 128 * 128 * 4;
+        total_texture_memory += tex_size;
+        
+        printf("Textures: %d, Memory: %d KB (VRAM left: %u KB)\n", 
+               texture_count, 
+               total_texture_memory / 1024,
+               pvr_mem_available() / 1024);
+    }
+    
+    GLuint mapped_texnum = texture_map[map_index];
+    
+    if (gl_nobind->value && draw_chars)
+        mapped_texnum = draw_chars->texnum;
+    
+    if (gl_state.currenttextures[gl_state.currenttmu] == mapped_texnum)
+        return;
+    
+    gl_state.currenttextures[gl_state.currenttmu] = mapped_texnum;
+    glBindTexture(GL_TEXTURE_2D, mapped_texnum);
 }
-
 void GL_MBind( GLenum target, int texnum )
 {
 	GL_SelectTexture( target );
@@ -722,7 +755,6 @@ void LoadTGA (char *name, byte **pic, int *width, int *height)
 	ri.FS_FreeFile (buffer);
 }
 
-
 /*
 ====================================================================
 
@@ -907,24 +939,29 @@ Operates in place, quartering the size of the texture
 */
 void GL_MipMap (byte *in, int width, int height)
 {
-	int		i, j;
-	byte	*out;
+    // If dimensions aren't equal, make them equal by using the larger dimension
+    if (width != height) {
+        int max_dim = (width > height) ? width : height;
+        width = height = max_dim;
+    }
 
-	width <<=2;
-	height >>= 1;
-	out = in;
-	for (i=0 ; i<height ; i++, in+=width)
-	{
-		for (j=0 ; j<width ; j+=8, out+=4, in+=8)
-		{
-			out[0] = (in[0] + in[4] + in[width+0] + in[width+4])>>2;
-			out[1] = (in[1] + in[5] + in[width+1] + in[width+5])>>2;
-			out[2] = (in[2] + in[6] + in[width+2] + in[width+6])>>2;
-			out[3] = (in[3] + in[7] + in[width+3] + in[width+7])>>2;
-		}
-	}
+    int     i, j;
+    byte    *out;
+
+    width <<=2;
+    height >>= 1;
+    out = in;
+    for (i=0 ; i<height ; i++, in+=width)
+    {
+        for (j=0 ; j<width ; j+=8, out+=4, in+=8)
+        {
+            out[0] = (in[0] + in[4] + in[width+0] + in[width+4])>>2;
+            out[1] = (in[1] + in[5] + in[width+1] + in[width+5])>>2;
+            out[2] = (in[2] + in[6] + in[width+2] + in[width+6])>>2;
+            out[3] = (in[3] + in[7] + in[width+3] + in[width+7])>>2;
+        }
+    }
 }
-
 /*
 ===============
 GL_Upload32
@@ -955,191 +992,183 @@ void GL_BuildPalettedTexture( unsigned char *paletted_texture, unsigned char *sc
 int		upload_width, upload_height;
 qboolean uploaded_paletted;
 
-qboolean GL_Upload32 (unsigned *data, int width, int height,  qboolean mipmap)
+qboolean GL_Upload32 (unsigned *data, int width, int height, qboolean mipmap)
 {
-	int			samples;
-	unsigned	scaled[256*256];
-	unsigned char paletted_texture[256*256];
-	int			scaled_width, scaled_height;
-	int			i, c;
-	byte		*scan;
-	int comp;
+    int         samples;
+    unsigned    scaled[256*256];
+    unsigned char paletted_texture[256*256];
+    int         scaled_width, scaled_height;
+    int         i, c;
+    byte        *scan;
+    int         comp;
+    int         max_dimension;
+ri.Con_Printf(PRINT_ALL, "GL_Upload8: width: %d, height: %d\n", width, height);
 
-	uploaded_paletted = false;
+    uploaded_paletted = false;
 
-	for (scaled_width = 1 ; scaled_width < width ; scaled_width<<=1)
-		;
-	if (gl_round_down->value && scaled_width > width && mipmap)
-		scaled_width >>= 1;
-	for (scaled_height = 1 ; scaled_height < height ; scaled_height<<=1)
-		;
-	if (gl_round_down->value && scaled_height > height && mipmap)
-		scaled_height >>= 1;
+    // Find largest dimension and scale both width/height to that
+    max_dimension = width > height ? width : height;
 
-	// let people sample down the world textures for speed
-	if (mipmap)
-	{
-		scaled_width >>= (int)gl_picmip->value;
-		scaled_height >>= (int)gl_picmip->value;
-	}
+    // Find next power of 2 size that fits max dimension
+    for (scaled_width = 1; scaled_width < max_dimension; scaled_width<<=1)
+        ;
+    
+    // Make it square
+    scaled_height = scaled_width;
 
-	// don't ever bother with >256 textures
-	if (scaled_width > 256)
-		scaled_width = 256;
-	if (scaled_height > 256)
-		scaled_height = 256;
+    if (gl_round_down->value && scaled_width > max_dimension && mipmap)
+    {
+        scaled_width >>= 1;
+        scaled_height = scaled_width; // Keep square
+    }
 
-	if (scaled_width < 1)
-		scaled_width = 1;
-	if (scaled_height < 1)
-		scaled_height = 1;
+    // let people sample down the world textures for speed
+    if (mipmap)
+    {
+        scaled_width >>= (int)gl_picmip->value;
+        scaled_height = scaled_width; // Keep square
+    }
 
-	upload_width = scaled_width;
-	upload_height = scaled_height;
+    // don't ever bother with >256 textures
+    if (scaled_width > 256)
+    {
+        scaled_width = 256;
+        scaled_height = 256;
+    }
 
-	if (scaled_width * scaled_height > sizeof(scaled)/4)
-		ri.Sys_Error (ERR_DROP, "GL_Upload32: too big");
+    if (scaled_width < 1)
+    {
+        scaled_width = 1;
+        scaled_height = 1;
+    }
 
-	// scan the texture for any non-255 alpha
-	c = width*height;
-	scan = ((byte *)data) + 3;
-	samples = gl_solid_format;
-	for (i=0 ; i<c ; i++, scan += 4)
-	{
-		if ( *scan != 255 )
-		{
-			samples = gl_alpha_format;
-			break;
-		}
-	}
+    upload_width = scaled_width;
+    upload_height = scaled_height;
 
-	if (samples == gl_solid_format)
-	    comp = gl_tex_solid_format;
-	else if (samples == gl_alpha_format)
-	    comp = gl_tex_alpha_format;
-	else {
-	    ri.Con_Printf (PRINT_ALL,
-			   "Unknown number of texture components %i\n",
-			   samples);
-	    comp = samples;
-	}
+    if (scaled_width * scaled_height > sizeof(scaled)/4)
+        ri.Sys_Error (ERR_DROP, "GL_Upload32: too big");
 
-#if 0
-	if (mipmap)
-		gluBuild2DMipmaps (GL_TEXTURE_2D, samples, width, height, GL_RGBA, GL_UNSIGNED_BYTE, trans);
-	else if (scaled_width == width && scaled_height == height)
-		qglTexImage2D (GL_TEXTURE_2D, 0, comp, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, trans);
-	else
-	{
-		gluScaleImage (GL_RGBA, width, height, GL_UNSIGNED_BYTE, trans,
-			scaled_width, scaled_height, GL_UNSIGNED_BYTE, scaled);
-		qglTexImage2D (GL_TEXTURE_2D, 0, comp, scaled_width, scaled_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, scaled);
-	}
-#else
+    // scan the texture for any non-255 alpha
+    c = width*height;
+    scan = ((byte *)data) + 3;
+    samples = gl_solid_format;
+    for (i=0; i<c; i++, scan += 4)
+    {
+        if (*scan != 255)
+        {
+            samples = gl_alpha_format;
+            break;
+        }
+    }
 
-	if (scaled_width == width && scaled_height == height)
-	{
-		if (!mipmap)
-		{
-			if ( qglColorTableEXT && gl_ext_palettedtexture->value && samples == gl_solid_format )
-			{
-				uploaded_paletted = true;
-				GL_BuildPalettedTexture( paletted_texture, ( unsigned char * ) data, scaled_width, scaled_height );
-				qglTexImage2D( GL_TEXTURE_2D,
-							  0,
-							  GL_COLOR_INDEX8_EXT,
-							  scaled_width,
-							  scaled_height,
-							  0,
-							  GL_COLOR_INDEX,
-							  GL_UNSIGNED_BYTE,
-							  paletted_texture );
-			}
-			else
-			{
-				qglTexImage2D (GL_TEXTURE_2D, 0, comp, scaled_width, scaled_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-			}
-			goto done;
-		}
-		memcpy (scaled, data, width*height*4);
-	}
-	else
-		GL_ResampleTexture (data, width, height, scaled, scaled_width, scaled_height);
+    if (samples == gl_solid_format)
+        comp = gl_tex_solid_format;
+    else if (samples == gl_alpha_format)
+        comp = gl_tex_alpha_format;
+    else {
+        ri.Con_Printf (PRINT_ALL, "Unknown number of texture components %i\n", samples);
+        comp = samples;
+    }
 
-	GL_LightScaleTexture (scaled, scaled_width, scaled_height, !mipmap );
+    if (scaled_width == width && scaled_height == height)
+    {
+        if (!mipmap)
+        {
+            if (qglColorTableEXT && gl_ext_palettedtexture->value && samples == gl_solid_format)
+            {
+                uploaded_paletted = true;
+                GL_BuildPalettedTexture(paletted_texture, (unsigned char *)data, scaled_width, scaled_height);
+                qglTexImage2D(GL_TEXTURE_2D,
+                          0,
+                          GL_COLOR_INDEX8_EXT,
+                          scaled_width,
+                          scaled_height,
+                          0,
+                          GL_COLOR_INDEX,
+                          GL_UNSIGNED_BYTE,
+                          paletted_texture);
+            }
+            else
+            {
+                qglTexImage2D(GL_TEXTURE_2D, 0, comp, scaled_width, scaled_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+            }
+            goto done;
+        }
+        memcpy(scaled, data, width*height*4);
+    }
+    else
+        GL_ResampleTexture(data, width, height, scaled, scaled_width, scaled_height);
 
-	if ( qglColorTableEXT && gl_ext_palettedtexture->value && ( samples == gl_solid_format ) )
-	{
-		uploaded_paletted = true;
-		GL_BuildPalettedTexture( paletted_texture, ( unsigned char * ) scaled, scaled_width, scaled_height );
-		qglTexImage2D( GL_TEXTURE_2D,
-					  0,
-					  GL_COLOR_INDEX8_EXT,
-					  scaled_width,
-					  scaled_height,
-					  0,
-					  GL_COLOR_INDEX,
-					  GL_UNSIGNED_BYTE,
-					  paletted_texture );
-	}
-	else
-	{
-		qglTexImage2D( GL_TEXTURE_2D, 0, comp, scaled_width, scaled_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, scaled );
-	}
+    GL_LightScaleTexture(scaled, scaled_width, scaled_height, !mipmap);
 
-	if (mipmap)
-	{
-		int		miplevel;
+    if (qglColorTableEXT && gl_ext_palettedtexture->value && (samples == gl_solid_format))
+    {
+        uploaded_paletted = true;
+        GL_BuildPalettedTexture(paletted_texture, (unsigned char *)scaled, scaled_width, scaled_height);
+        qglTexImage2D(GL_TEXTURE_2D,
+                   0,
+                   GL_COLOR_INDEX8_EXT,
+                   scaled_width,
+                   scaled_height,
+                   0,
+                   GL_COLOR_INDEX,
+                   GL_UNSIGNED_BYTE,
+                   paletted_texture);
+    }
+    else
+    {
+        qglTexImage2D(GL_TEXTURE_2D, 0, comp, scaled_width, scaled_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, scaled);
+    }
 
-		miplevel = 0;
-		while (scaled_width > 1 || scaled_height > 1)
-		{
-			GL_MipMap ((byte *)scaled, scaled_width, scaled_height);
-			scaled_width >>= 1;
-			scaled_height >>= 1;
-			if (scaled_width < 1)
-				scaled_width = 1;
-			if (scaled_height < 1)
-				scaled_height = 1;
-			miplevel++;
-			if ( qglColorTableEXT && gl_ext_palettedtexture->value && samples == gl_solid_format )
-			{
-				uploaded_paletted = true;
-				GL_BuildPalettedTexture( paletted_texture, ( unsigned char * ) scaled, scaled_width, scaled_height );
-				qglTexImage2D( GL_TEXTURE_2D,
-							  miplevel,
-							  GL_COLOR_INDEX8_EXT,
-							  scaled_width,
-							  scaled_height,
-							  0,
-							  GL_COLOR_INDEX,
-							  GL_UNSIGNED_BYTE,
-							  paletted_texture );
-			}
-			else
-			{
-				qglTexImage2D (GL_TEXTURE_2D, miplevel, comp, scaled_width, scaled_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, scaled);
-			}
-		}
-	}
-done: ;
-#endif
+    if (mipmap)
+    {
+        int     miplevel;
 
+        miplevel = 0;
+        while (scaled_width > 1 || scaled_height > 1)
+        {
+            GL_MipMap((byte *)scaled, scaled_width, scaled_height);
+            scaled_width >>= 1;
+            scaled_height = scaled_width; // Keep square at each mipmap level
+            if (scaled_width < 1)
+                scaled_width = scaled_height = 1;
+            miplevel++;
+            
+            if (qglColorTableEXT && gl_ext_palettedtexture->value && samples == gl_solid_format)
+            {
+                uploaded_paletted = true;
+                GL_BuildPalettedTexture(paletted_texture, (unsigned char *)scaled, scaled_width, scaled_height);
+                qglTexImage2D(GL_TEXTURE_2D,
+                           miplevel,
+                           GL_COLOR_INDEX8_EXT,
+                           scaled_width,
+                           scaled_height,
+                           0,
+                           GL_COLOR_INDEX,
+                           GL_UNSIGNED_BYTE,
+                           paletted_texture);
+            }
+            else
+            {
+                qglTexImage2D(GL_TEXTURE_2D, miplevel, comp, scaled_width, scaled_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, scaled);
+            }
+        }
+    }
 
-	if (mipmap)
-	{
-		qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_filter_min);
-		qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_filter_max);
-	}
-	else
-	{
-		qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_filter_max);
-		qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_filter_max);
-	}
+done:
+    if (mipmap)
+    {
+        qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_filter_min);
+        qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_filter_max);
+    }
+    else
+    {
+        qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_filter_max);
+        qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_filter_max);
+    }
 
-	return (samples == gl_alpha_format);
+    return (samples == gl_alpha_format);
 }
-
 /*
 ===============
 GL_Upload8
@@ -1164,67 +1193,83 @@ static qboolean IsPowerOf2( int value )
 }
 */
 
-qboolean GL_Upload8 (byte *data, int width, int height,  qboolean mipmap, qboolean is_sky )
+qboolean GL_Upload8 (byte *data, int width, int height, qboolean mipmap, qboolean is_sky)
 {
-	unsigned	trans[512*256];
-	int			i, s;
-	int			p;
+	unsigned trans[128*128];   // Bruce fix this later.
+    int         i, s, j;
+    int         p;
+    int         scaled_width, scaled_height;
 
-	s = width*height;
+    // Force everything to 64x64
+    scaled_width = scaled_height = 64;
 
-	if (s > sizeof(trans)/4)
-		ri.Sys_Error (ERR_DROP, "GL_Upload8: too large");
+    ri.Con_Printf(PRINT_ALL, "GL_Upload8: original: %dx%d, scaled: %dx%d\n", 
+                 width, height, scaled_width, scaled_height);
 
-	if ( qglColorTableEXT && 
-		 gl_ext_palettedtexture->value && 
-		 is_sky )
-	{
-		qglTexImage2D( GL_TEXTURE_2D,
-					  0,
-					  GL_COLOR_INDEX8_EXT,
-					  width,
-					  height,
-					  0,
-					  GL_COLOR_INDEX,
-					  GL_UNSIGNED_BYTE,
-					  data );
+    // Create temporary buffer for scaled image
+    byte *scaled = malloc(scaled_width * scaled_height);
+    if (!scaled)
+        ri.Sys_Error(ERR_DROP, "GL_Upload8: couldn't allocate memory");
 
-		qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_filter_max);
-		qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_filter_max);
-	}
-	else
-	{
-		for (i=0 ; i<s ; i++)
-		{
-			p = data[i];
-			trans[i] = d_8to24table[p];
+    // Simple scaling
+    for (i = 0; i < scaled_height; i++) {
+        int src_y = (i * height) / scaled_height;
+        for (j = 0; j < scaled_width; j++) {
+            int src_x = (j * width) / scaled_width;
+            scaled[i * scaled_width + j] = data[src_y * width + src_x];
+        }
+    }
 
-			if (p == 255)
-			{	// transparent, so scan around for another color
-				// to avoid alpha fringes
-				// FIXME: do a full flood fill so mips work...
-				if (i > width && data[i-width] != 255)
-					p = data[i-width];
-				else if (i < s-width && data[i+width] != 255)
-					p = data[i+width];
-				else if (i > 0 && data[i-1] != 255)
-					p = data[i-1];
-				else if (i < s-1 && data[i+1] != 255)
-					p = data[i+1];
-				else
-					p = 0;
-				// copy rgb components
-				((byte *)&trans[i])[0] = ((byte *)&d_8to24table[p])[0];
-				((byte *)&trans[i])[1] = ((byte *)&d_8to24table[p])[1];
-				((byte *)&trans[i])[2] = ((byte *)&d_8to24table[p])[2];
-			}
-		}
+    s = scaled_width * scaled_height;
 
-		return GL_Upload32 (trans, width, height, mipmap);
-	}
+    if (qglColorTableEXT && gl_ext_palettedtexture->value && is_sky)
+    {
+        qglTexImage2D(GL_TEXTURE_2D,
+                     0,
+                     GL_COLOR_INDEX8_EXT,
+                     scaled_width,
+                     scaled_height,
+                     0,
+                     GL_COLOR_INDEX,
+                     GL_UNSIGNED_BYTE,
+                     scaled);
+
+        qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_filter_max);
+        qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_filter_max);
+        free(scaled);
+        return false;
+    }
+    else
+    {
+        // Convert to 32-bit and handle transparency
+        for (i = 0; i < s; i++)
+        {
+            p = scaled[i];
+            trans[i] = d_8to24table[p];
+
+            if (p == 255)    // transparent, so scan around for another color
+            {   
+                if (i > scaled_width && scaled[i-scaled_width] != 255)
+                    p = scaled[i-scaled_width];
+                else if (i < s-scaled_width && scaled[i+scaled_width] != 255)
+                    p = scaled[i+scaled_width];
+                else if (i > 0 && scaled[i-1] != 255)
+                    p = scaled[i-1];
+                else if (i < s-1 && scaled[i+1] != 255)
+                    p = scaled[i+1];
+                else
+                    p = 0;
+                // copy rgb components
+                ((byte *)&trans[i])[0] = ((byte *)&d_8to24table[p])[0];
+                ((byte *)&trans[i])[1] = ((byte *)&d_8to24table[p])[1];
+                ((byte *)&trans[i])[2] = ((byte *)&d_8to24table[p])[2];
+            }
+        }
+
+        free(scaled);
+        return GL_Upload32(trans, scaled_width, scaled_height, mipmap);
+    }
 }
-
-
 /*
 ================
 GL_LoadPic
@@ -1236,6 +1281,8 @@ image_t *GL_LoadPic (char *name, byte *pic, int width, int height, imagetype_t t
 {
 	image_t		*image;
 	int			i;
+    ri.Con_Printf(PRINT_ALL, "GL_LoadPic: Loading %s, %dx%d, type=%d, bits=%d\n", 
+                 name, width, height, type, bits);
 
 	// find a free image_t
 	for (i=0, image=gltextures ; i<numgltextures ; i++,image++)
@@ -1340,7 +1387,6 @@ image_t *GL_LoadWal (char *name)
 
 	return image;
 }
-
 /*
 ===============
 GL_FindImage

@@ -476,104 +476,125 @@ R_RenderBrushPoly
 */
 void R_RenderBrushPoly (msurface_t *fa)
 {
-	int			maps;
-	image_t		*image;
-	qboolean is_dynamic = false;
+    int         maps;
+    image_t     *image;
+    qboolean    is_dynamic = false;
 
-	c_brush_polys++;
+    c_brush_polys++;
 
-	image = R_TextureAnimation (fa->texinfo);
+    image = R_TextureAnimation (fa->texinfo);
 
-	if (fa->flags & SURF_DRAWTURB)
-	{	
-		GL_Bind( image->texnum );
+    if (fa->flags & SURF_DRAWTURB)
+    {   
+        GL_Bind( image->texnum );
 
-		// warp texture, no lightmaps
-		GL_TexEnv( GL_MODULATE );
-		qglColor4f( gl_state.inverse_intensity, 
-			        gl_state.inverse_intensity,
-					gl_state.inverse_intensity,
-					1.0F );
-		EmitWaterPolys (fa);
-		GL_TexEnv( GL_REPLACE );
+        /* warp texture, no lightmaps */
+        GL_TexEnv( GL_MODULATE );
+        qglColor4f( gl_state.inverse_intensity, 
+                    gl_state.inverse_intensity,
+                    gl_state.inverse_intensity,
+                    1.0F );
+        EmitWaterPolys (fa);
+        GL_TexEnv( GL_REPLACE );
 
-		return;
-	}
-	else
-	{
-		GL_Bind( image->texnum );
+        return;
+    }
+    else
+    {
+        GL_Bind( image->texnum );
+        GL_TexEnv( GL_REPLACE );
+    }
 
-		GL_TexEnv( GL_REPLACE );
-	}
+    if(fa->texinfo->flags & SURF_FLOWING)
+        DrawGLFlowingPoly (fa);
+    else
+        DrawGLPoly (fa->polys);
 
-//======
-//PGM
-	if(fa->texinfo->flags & SURF_FLOWING)
-		DrawGLFlowingPoly (fa);
-	else
-		DrawGLPoly (fa->polys);
-//PGM
-//======
+    /*
+    ** check for lightmap modification
+    */
+    for ( maps = 0; maps < MAXLIGHTMAPS && fa->styles[maps] != 255; maps++ )
+    {
+        if ( r_newrefdef.lightstyles[fa->styles[maps]].white != fa->cached_light[maps] )
+            goto dynamic;
+    }
 
-	/*
-	** check for lightmap modification
-	*/
-	for ( maps = 0; maps < MAXLIGHTMAPS && fa->styles[maps] != 255; maps++ )
-	{
-		if ( r_newrefdef.lightstyles[fa->styles[maps]].white != fa->cached_light[maps] )
-			goto dynamic;
-	}
-
-	// dynamic this frame or dynamic previously
-	if ( ( fa->dlightframe == r_framecount ) )
-	{
+    /* dynamic this frame or dynamic previously */
+    if ( ( fa->dlightframe == r_framecount ) )
+    {
 dynamic:
-		if ( gl_dynamic->value )
-		{
-			if (!( fa->texinfo->flags & (SURF_SKY|SURF_TRANS33|SURF_TRANS66|SURF_WARP ) ) )
-			{
-				is_dynamic = true;
-			}
-		}
-	}
+        if ( gl_dynamic->value )
+        {
+            if (!( fa->texinfo->flags & (SURF_SKY|SURF_TRANS33|SURF_TRANS66|SURF_WARP ) ) )
+            {
+                is_dynamic = true;
+            }
+        }
+    }
 
-	if ( is_dynamic )
-	{
-		if ( ( fa->styles[maps] >= 32 || fa->styles[maps] == 0 ) && ( fa->dlightframe != r_framecount ) )
-		{
-			unsigned	temp[34*34];
-			int			smax, tmax;
+    if ( is_dynamic )
+    {
+        if ( ( fa->styles[maps] >= 32 || fa->styles[maps] == 0 ) && ( fa->dlightframe != r_framecount ) )
+        {
+            int         smax, tmax;
+            int         scaled_smax, scaled_tmax;
+            byte        *temp;
 
-			smax = (fa->extents[0]>>4)+1;
-			tmax = (fa->extents[1]>>4)+1;
+            smax = (fa->extents[0]>>4)+1;
+            tmax = (fa->extents[1]>>4)+1;
 
-			R_BuildLightMap( fa, (void *)temp, smax*4 );
-			R_SetCacheState( fa );
+            /* Calculate power of 2 dimensions, minimum 8 */
+            scaled_smax = 8;
+            scaled_tmax = 8;
 
-			GL_Bind( gl_state.lightmap_textures + fa->lightmaptexturenum );
+            while (scaled_smax < smax)
+                scaled_smax <<= 1;
+            while (scaled_tmax < tmax)
+                scaled_tmax <<= 1;
 
-			qglTexSubImage2D( GL_TEXTURE_2D, 0,
-							  fa->light_s, fa->light_t, 
-							  smax, tmax, 
-							  GL_LIGHTMAP_FORMAT, 
-							  GL_UNSIGNED_BYTE, temp );
+            /* Make square */
+            if (scaled_smax > scaled_tmax)
+                scaled_tmax = scaled_smax;
+            else if (scaled_tmax > scaled_smax)
+                scaled_smax = scaled_tmax;
 
-			fa->lightmapchain = gl_lms.lightmap_surfaces[fa->lightmaptexturenum];
-			gl_lms.lightmap_surfaces[fa->lightmaptexturenum] = fa;
-		}
-		else
-		{
-			fa->lightmapchain = gl_lms.lightmap_surfaces[0];
-			gl_lms.lightmap_surfaces[0] = fa;
-		}
-	}
-	else
-	{
-		fa->lightmapchain = gl_lms.lightmap_surfaces[fa->lightmaptexturenum];
-		gl_lms.lightmap_surfaces[fa->lightmaptexturenum] = fa;
-	}
+            /* Allocate temp buffer with scaled size */
+            temp = malloc(scaled_smax * scaled_tmax * 4);
+            if (!temp)
+                ri.Sys_Error(ERR_DROP, "R_RenderBrushPoly: couldn't allocate temp buffer");
+
+            /* Clear temp buffer to 0 */
+            memset(temp, 0, scaled_smax * scaled_tmax * 4);
+
+            /* Build lightmap into temp buffer */
+            R_BuildLightMap(fa, temp, scaled_smax * 4);
+            R_SetCacheState(fa);
+
+            GL_Bind(gl_state.lightmap_textures + fa->lightmaptexturenum);
+
+            qglTexSubImage2D(GL_TEXTURE_2D, 0,
+                            fa->light_s, fa->light_t, 
+                            scaled_smax, scaled_tmax,
+                            GL_LIGHTMAP_FORMAT,
+                            GL_UNSIGNED_BYTE, temp);
+
+            free(temp);
+
+            fa->lightmapchain = gl_lms.lightmap_surfaces[fa->lightmaptexturenum];
+            gl_lms.lightmap_surfaces[fa->lightmaptexturenum] = fa;
+        }
+        else
+        {
+            fa->lightmapchain = gl_lms.lightmap_surfaces[0];
+            gl_lms.lightmap_surfaces[0] = fa;
+        }
+    }
+    else
+    {
+        fa->lightmapchain = gl_lms.lightmap_surfaces[fa->lightmaptexturenum];
+        gl_lms.lightmap_surfaces[fa->lightmaptexturenum] = fa;
+    }
 }
-
 
 /*
 ================
@@ -628,7 +649,7 @@ void R_DrawAlphaSurfaces (void)
 ================
 DrawTextureChains
 ================
-*/ /*   Some issue here I need to figure out.. for now i'll hack together an alternative
+*/ //  Some issue here I need to figure out.. for now i'll hack together an alternative
 void DrawTextureChains (void)
 {
 	int		i;
@@ -696,10 +717,10 @@ void DrawTextureChains (void)
 	GL_TexEnv( GL_REPLACE );
 }
 
-*/
 
 
 
+/*
 
 void DrawTextureChains (void)
 {
@@ -753,7 +774,7 @@ void DrawTextureChains (void)
 }
 
 
-
+*/
 
 static void GL_RenderLightmappedPoly( msurface_t *surf )
 {
@@ -1311,41 +1332,66 @@ void R_DrawWorld (void)
 */
 
 
+
 void R_DrawWorld (void)
 {
-    entity_t ent;
-    
-    if (!r_worldmodel || !r_drawworld->value || (r_newrefdef.rdflags & RDF_NOWORLDMODEL))
-        return;
+	entity_t	ent;
 
-    currentmodel = r_worldmodel;
-    VectorCopy(r_newrefdef.vieworg, modelorg);
+	if (!r_drawworld->value)
+		return;
 
-    memset(&ent, 0, sizeof(ent));
-    ent.frame = (int)(r_newrefdef.time*2);
-    currententity = &ent;
+	if ( r_newrefdef.rdflags & RDF_NOWORLDMODEL )
+		return;
 
-    gl_state.currenttextures[0] = gl_state.currenttextures[1] = -1;
+	currentmodel = r_worldmodel;
 
-    qglColor3f(1,1,1);
-    memset(gl_lms.lightmap_surfaces, 0, sizeof(gl_lms.lightmap_surfaces));
-    R_ClearSkyBox();
-    
-    qglEnable(GL_DEPTH_TEST);
-    qglDepthMask(GL_TRUE);
-    qglEnable(GL_CULL_FACE);
-    qglEnable(GL_TEXTURE_2D);
-    
-    R_RecursiveWorldNode(r_worldmodel->nodes);
+	VectorCopy (r_newrefdef.vieworg, modelorg);
 
-    DrawTextureChains();
-   // R_BlendLightmaps();
-    
-    //R_DrawSkyBox();
-    // R_DrawTriangleOutlines();
-		//qglDisable(GL_TEXTURE_2D);  Bruce - Enable disable.. for textures.. 
+	// auto cycle the world frame for texture animation
+	memset (&ent, 0, sizeof(ent));
+	ent.frame = (int)(r_newrefdef.time*2);
+	currententity = &ent;
 
+	gl_state.currenttextures[0] = gl_state.currenttextures[1] = -1;
+
+	qglColor3f (1,1,1);
+	memset (gl_lms.lightmap_surfaces, 0, sizeof(gl_lms.lightmap_surfaces));
+	R_ClearSkyBox ();
+
+	if ( qglMTexCoord2fSGIS )
+	{
+		GL_EnableMultitexture( true );
+
+		GL_SelectTexture( GL_TEXTURE0_SGIS );
+		GL_TexEnv( GL_REPLACE );
+		GL_SelectTexture( GL_TEXTURE1_SGIS );
+
+		if ( gl_lightmap->value )
+			GL_TexEnv( GL_REPLACE );
+		else 
+			GL_TexEnv( GL_MODULATE );
+
+		R_RecursiveWorldNode (r_worldmodel->nodes);
+
+		GL_EnableMultitexture( false );
+	}
+	else
+	{
+		R_RecursiveWorldNode (r_worldmodel->nodes);
+	}
+
+	/*
+	** theoretically nothing should happen in the next two functions
+	** if multitexture is enabled
+	*/
+	DrawTextureChains ();
+	R_BlendLightmaps ();
+	
+	R_DrawSkyBox ();
+
+	R_DrawTriangleOutlines ();
 }
+
 
 /*
 ===============
@@ -1451,55 +1497,59 @@ static void LM_InitBlock( void )
 
 static void LM_UploadBlock( qboolean dynamic )
 {
-	int texture;
-	int height = 0;
+    int texture;
+    int height = 0;
 
-	if ( dynamic )
-	{
-		texture = 0;
-	}
-	else
-	{
-		texture = gl_lms.current_lightmap_texture;
-	}
+    if ( dynamic )
+    {
+        texture = 0;
+    }
+    else
+    {
+        texture = gl_lms.current_lightmap_texture;
+    }
 
-	GL_Bind( gl_state.lightmap_textures + texture );
-	qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    GL_Bind( gl_state.lightmap_textures + texture );
+    qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-	if ( dynamic )
-	{
-		int i;
+    if ( dynamic )
+    {
+        int i;
 
-		for ( i = 0; i < BLOCK_WIDTH; i++ )
-		{
-			if ( gl_lms.allocated[i] > height )
-				height = gl_lms.allocated[i];
-		}
+        for ( i = 0; i < BLOCK_WIDTH; i++ )
+        {
+            if ( gl_lms.allocated[i] > height )
+                height = gl_lms.allocated[i];
+        }
 
-		qglTexSubImage2D( GL_TEXTURE_2D, 
-						  0,
-						  0, 0,
-						  BLOCK_WIDTH, height,
-						  GL_LIGHTMAP_FORMAT,
-						  GL_UNSIGNED_BYTE,
-						  gl_lms.lightmap_buffer );
-	}
-	else
-	{
-		qglTexImage2D( GL_TEXTURE_2D, 
-					   0, 
-					   gl_lms.internal_format,
-					   BLOCK_WIDTH, BLOCK_HEIGHT, 
-					   0, 
-					   GL_LIGHTMAP_FORMAT, 
-					   GL_UNSIGNED_BYTE, 
-					   gl_lms.lightmap_buffer );
-		if ( ++gl_lms.current_lightmap_texture == MAX_LIGHTMAPS )
-			ri.Sys_Error( ERR_DROP, "LM_UploadBlock() - MAX_LIGHTMAPS exceeded\n" );
-	}
+        // Ensure height is a power of 2 and at least 8
+        int scaled_height = 8;
+        while (scaled_height < height)
+            scaled_height <<= 1;
+
+        qglTexSubImage2D( GL_TEXTURE_2D, 
+                          0,
+                          0, 0,
+                          BLOCK_WIDTH, scaled_height, // Use scaled height
+                          GL_LIGHTMAP_FORMAT,
+                          GL_UNSIGNED_BYTE,
+                          gl_lms.lightmap_buffer );
+    }
+    else
+    {
+        qglTexImage2D( GL_TEXTURE_2D, 
+                       0, 
+                       gl_lms.internal_format,
+                       BLOCK_WIDTH, BLOCK_HEIGHT,
+                       0, 
+                       GL_LIGHTMAP_FORMAT, 
+                       GL_UNSIGNED_BYTE, 
+                       gl_lms.lightmap_buffer );
+        if ( ++gl_lms.current_lightmap_texture == MAX_LIGHTMAPS )
+            ri.Sys_Error( ERR_DROP, "LM_UploadBlock() - MAX_LIGHTMAPS exceeded\n" );
+    }
 }
-
 // returns a texture number and the position inside it
 static qboolean LM_AllocBlock (int w, int h, int *x, int *y)
 {

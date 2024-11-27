@@ -119,7 +119,7 @@ typedef struct image_s
 #define	TEXNUM_SCRAPS		1152
 #define	TEXNUM_IMAGES		1153
 
-#define		MAX_GLTEXTURES	1024
+#define		MAX_GLTEXTURES	512
 
 //===================================================================
 

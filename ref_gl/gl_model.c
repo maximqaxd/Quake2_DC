@@ -238,6 +238,7 @@ model_t *Mod_ForName (char *name, qboolean crash)
 	//
 	// fill it in
 	//
+	// Bruce look at this later.
 
 
 	// call the apropriate loader
