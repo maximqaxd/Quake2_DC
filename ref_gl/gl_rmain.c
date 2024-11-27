@@ -1055,13 +1055,13 @@ void R_Register( void )
     // Enables backface culling
     gl_cull = ri.Cvar_Get ("gl_cull", "1", 0);
     // Enables screen blending effects
-    gl_polyblend = ri.Cvar_Get ("gl_polyblend", "1", 0);
+    gl_polyblend = ri.Cvar_Get ("gl_polyblend", "0", 0); // Gotta fix this as well due to using cglm I suspect.
     // Controls flash lighting effects
     gl_flashblend = ri.Cvar_Get ("gl_flashblend", "1", 0);  // Need to fix this. Enabled for now.
     // Player model texture quality reduction
     gl_playermip = ri.Cvar_Get ("gl_playermip", "0", 0);
     // Forces monochrome lightmaps
-    gl_monolightmap = ri.Cvar_Get( "gl_monolightmap", "1", 0 );
+    gl_monolightmap = ri.Cvar_Get( "gl_monolightmap", "0", 0 );  // ye this didnt fix it either.
     // OpenGL driver selection
     gl_driver = ri.Cvar_Get( "gl_driver", "opengl32", CVAR_ARCHIVE );
     // Texture filtering mode

@@ -355,7 +355,7 @@ static float s_blocklights[34*34*3];
 ===============
 R_AddDynamicLights
 ===============
-*/  // Bruce - Need to fix the blending.. 
+*/  // Bruce - Need to fix the blending..  I think lighting data is being treated as texture coords. 
 void R_AddDynamicLights (msurface_t *surf)
 {
 	int			lnum;
