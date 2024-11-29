@@ -3,21 +3,23 @@
 #include "client/keys.h"
 #include "quake2.h"
 #include <kos/thread.h>
+#include <malloc.h>
+#include <string.h>
+#include <stdio.h>
 
-#define MAIN_STACK_SIZE (64 * 1024)  // 64KB for main thread
+#define MAIN_STACK_SIZE (32 * 1024)  // 64KB for main thread
+#define RAM_UPDATE_INTERVAL 5000      // 5 seconds in milliseconds
 
 static int _width = 640;
 static int _height = 480;
 int _old_button_state = 0;
+static unsigned long systemRam = 0x00000000;
+static unsigned long elfOffset = 0x8c000000;  // Dreamcast specific
+static unsigned long stackSize = 0x00000000;
+static unsigned long lastRamCheck = 0;
 
-typedef float dc_vec3_t[3];
-
-typedef struct dc_poly_s {
-    struct dc_poly_s *next;
-    int numverts;
-    int flags;
-    float verts[4][3];    // Variable sized
-} dc_poly_t;
+extern unsigned long end;
+extern unsigned long start;
 
 static void init_thread_stack(void) {
     kthread_t *current = thd_get_current();
@@ -31,103 +33,37 @@ static void init_thread_stack(void) {
     }
 }
 
-void DC_DrawPoly(dc_poly_t *p) {
-    int i;
-    float *v;
+unsigned long getFreeRam(void) {
+    struct mallinfo mi = mallinfo();
+    return systemRam - (mi.usmblks + stackSize);
+}
 
-    glBegin(GL_POLYGON);
-    v = p->verts[0];
-    for (i = 0; i < p->numverts; i++, v += 3) {
-        glVertex3fv(v);
+void setSystemRam(void) {
+    // Dreamcast has 16MB RAM
+    systemRam = 0x8d000000 - 0x8c000000;
+    stackSize = (int)&end - (int)&start + ((int)&start - elfOffset);
+}
+
+unsigned long getSystemRam(void) {
+    return systemRam;
+}
+
+unsigned long getUsedRam(void) {
+    return (systemRam - getFreeRam());
+}
+
+void checkAndDisplayRamStatus(void) {
+    unsigned long currentTime = timer_ms_gettime64();
+    if (currentTime - lastRamCheck >= RAM_UPDATE_INTERVAL) {
+        printf("\nRAM Status:\n");
+        printf("Total: %.2f MB, Free: %.2f MB, Used: %.2f MB\n",
+               getSystemRam() / (1024.0 * 1024.0),
+               getFreeRam() / (1024.0 * 1024.0),
+               getUsedRam() / (1024.0 * 1024.0));
+        lastRamCheck = currentTime;
     }
-    glEnd();
 }
-
-// Test room setup and rendering function
-void Test_DrawRoom(void) {
-    static float rot_y = 0.0f;
-    static float cam_x = 0.0f;
-    static float cam_y = 0.0f;
-    static float cam_z = 0.0f;
-    
-    static dc_poly_t floor_poly = {
-        .numverts = 4,
-        .verts = {
-            {-10.0f, -10.0f, -20.0f},
-            {10.0f, -10.0f, -20.0f},
-            {10.0f, 10.0f, -20.0f},
-            {-10.0f, 10.0f, -20.0f}
-        }
-    };
-
-    static dc_poly_t ceiling_poly = {
-        .numverts = 4,
-        .verts = {
-            {-10.0f, -10.0f, -10.0f},
-            {10.0f, -10.0f, -10.0f},
-            {10.0f, 10.0f, -10.0f},
-            {-10.0f, 10.0f, -10.0f}
-        }
-    };
-
-    static dc_poly_t wall1_poly = {
-        .numverts = 4,
-        .verts = {
-            {-10.0f, -10.0f, -20.0f},
-            {-10.0f, -10.0f, -10.0f},
-            {10.0f, -10.0f, -10.0f},
-            {10.0f, -10.0f, -20.0f}
-        }
-    };
-
-    static dc_poly_t wall2_poly = {
-        .numverts = 4,
-        .verts = {
-            {10.0f, -10.0f, -20.0f},
-            {10.0f, -10.0f, -10.0f},
-            {10.0f, 10.0f, -10.0f},
-            {10.0f, 10.0f, -20.0f}
-        }
-    };
-
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    
-    glLoadIdentity();
-    glTranslatef(0.0f, 0.0f, -50.0f);
-    glRotatef(-90, 1, 0, 0);    
-    glRotatef(90, 0, 0, 1);     
-    glTranslatef(-cam_x, -cam_y, -cam_z);
-    glRotatef(rot_y, 0, 1, 0);
-
-    glColor3f(1.0f, 1.0f, 1.0f);  // White
-    DC_DrawPoly(&floor_poly);
-
-    glColor3f(1.0f, 0.0f, 0.0f);  // Red
-    DC_DrawPoly(&ceiling_poly);
-
-    glColor3f(0.0f, 1.0f, 0.0f);  // Green
-    DC_DrawPoly(&wall1_poly);
-
-    glColor3f(0.0f, 0.0f, 1.0f);  // Blue
-    DC_DrawPoly(&wall2_poly);
-
-    MAPLE_FOREACH_BEGIN(MAPLE_FUNC_CONTROLLER, cont_state_t, state)
-        if(state->buttons & CONT_DPAD_UP)
-            cam_z -= 0.1f;
-        if(state->buttons & CONT_DPAD_DOWN)
-            cam_z += 0.1f;
-        if(state->buttons & CONT_DPAD_LEFT)
-            cam_x -= 0.1f;
-        if(state->buttons & CONT_DPAD_RIGHT)
-            cam_x += 0.1f;
-        
-        rot_y += state->joyx * 0.1f;
-    MAPLE_FOREACH_END()
-    
-    glKosSwapBuffers();
-}
-
-// Quake 2 interface functions
+// Quake 2 interface functions remain the same
 qboolean GLimp_InitGL(void) { return true; }
 
 static void setupWindow(qboolean fullscreen) { }
@@ -179,7 +115,7 @@ void QG_ReleaseMouse(void) { }
 
 void HandleInput(void) {
     MAPLE_FOREACH_BEGIN(MAPLE_FUNC_CONTROLLER, cont_state_t, state)
-        int i; 
+        int i;
         int button_state = 0;
         
         if (state->buttons & CONT_DPAD_UP)
@@ -240,9 +176,9 @@ void QG_GetMouseDiff(int* dx, int* dy) {
     MAPLE_FOREACH_END()
 }
 
-// Main entry point
 int main(int argc, char **argv) {
     init_thread_stack();
+    setSystemRam();  // Initialize RAM tracking
 
     // PowerVR config
     GLdcConfig config;
@@ -251,14 +187,18 @@ int main(int argc, char **argv) {
     config.fsaa_enabled = GL_FALSE;
     config.internal_palette_format = GL_RGBA8;
     config.initial_op_capacity = 4096 * 3;
-    config.initial_pt_capacity = 256 * 3; 
+    config.initial_pt_capacity = 256 * 3;
     config.initial_tr_capacity = 1024 * 3;
     config.initial_immediate_capacity = 256 * 3;
     glKosInitEx(&config);
 
-    // Let Q2 handle all GL state setup
+    printf("Initial RAM Status:\n");
+    printf("Total: %lu KB, Free: %lu KB, Used: %lu KB\n",
+           getSystemRam() / 1024,
+           getFreeRam() / 1024,
+           getUsedRam() / 1024);
+
     int time, oldtime, newtime;
-    
     Quake2_Init(argc, argv);
 
     oldtime = QG_Milliseconds();
@@ -271,6 +211,7 @@ int main(int argc, char **argv) {
         } while (time < 1);
 
         Quake2_Frame(time);
+        checkAndDisplayRamStatus();  // Check RAM every 5 seconds
         
         oldtime = newtime;
         thd_pass();

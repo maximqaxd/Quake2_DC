@@ -240,13 +240,13 @@ model_t *Mod_ForName (char *name, qboolean crash)
 	//
 	// Bruce look at this later.
 
-
+	// Likely fucked shit up here but  I need to deal with that later. 
 	// call the apropriate loader
 	
 	switch (LittleLong(*(unsigned *)buf))
 	{
 	case IDALIASHEADER:
-		loadmodel->extradata = Hunk_Begin (0x200000);
+		loadmodel->extradata = Hunk_Begin (0x100000);
 		Mod_LoadAliasModel (mod, buf);
 		break;
 		
@@ -256,7 +256,7 @@ model_t *Mod_ForName (char *name, qboolean crash)
 		break;
 	
 	case IDBSPHEADER:
-		loadmodel->extradata = Hunk_Begin (0x1000000);
+		loadmodel->extradata = Hunk_Begin (0x400000);
 		Mod_LoadBrushModel (mod, buf);
 		break;
 
@@ -333,25 +333,30 @@ Mod_LoadVertexes
 */
 void Mod_LoadVertexes (lump_t *l)
 {
-	dvertex_t	*in;
-	mvertex_t	*out;
-	int			i, count;
+    dvertex_t	*in;
+    mvertex_t	*out;
+    int			i, count;
+    float       size_mb;
 
-	in = (void *)(mod_base + l->fileofs);
-	if (l->filelen % sizeof(*in))
-		ri.Sys_Error (ERR_DROP, "MOD_LoadBmodel: funny lump size in %s",loadmodel->name);
-	count = l->filelen / sizeof(*in);
-	out = Hunk_Alloc ( count*sizeof(*out));	
+    in = (void *)(mod_base + l->fileofs);
+    if (l->filelen % sizeof(*in))
+        ri.Sys_Error (ERR_DROP, "MOD_LoadBmodel: funny lump size in %s",loadmodel->name);
+    count = l->filelen / sizeof(*in);
+    out = Hunk_Alloc ( count*sizeof(*out));	
 
-	loadmodel->vertexes = out;
-	loadmodel->numvertexes = count;
+    // Calculate size in MB
+    size_mb = (float)(count * sizeof(*out)) / (1024.0 * 1024.0);
+    printf("Vertex data size: %.2f MB (Count: %d vertices)\n", size_mb, count);
 
-	for ( i=0 ; i<count ; i++, in++, out++)
-	{
-		out->position[0] = LittleFloat (in->point[0]);
-		out->position[1] = LittleFloat (in->point[1]);
-		out->position[2] = LittleFloat (in->point[2]);
-	}
+    loadmodel->vertexes = out;
+    loadmodel->numvertexes = count;
+
+    for ( i=0 ; i<count ; i++, in++, out++)
+    {
+        out->position[0] = LittleFloat (in->point[0]);
+        out->position[1] = LittleFloat (in->point[1]);
+        out->position[2] = LittleFloat (in->point[2]);
+    }
 }
 
 /*
@@ -1115,7 +1120,7 @@ void R_BeginRegistration (char *model)
 
 	// explicitly free the old map if different
 	// this guarantees that mod_known[0] is the world map
-	flushmap = ri.Cvar_Get ("flushmap", "0", 0);
+	flushmap = ri.Cvar_Get ("flushmap", "1", 0);
 	if ( strcmp(mod_known[0].name, fullname) || flushmap->value)
 		Mod_Free (&mod_known[0]);
 	r_worldmodel = Mod_ForName(fullname, true);

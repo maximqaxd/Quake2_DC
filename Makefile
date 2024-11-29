@@ -29,6 +29,7 @@ REF_GL_DIR = ref_gl
 #   -s \#   For mem gains. 
 # Compiler settings
 CC = kos-cc
+LDFLAGS += -Wl,--gc-sections -Wl,-Map=output.map -s 
 CFLAGS = -std=gnu89 \
    -Dstricmp=strcasecmp \
    -DNDEBUG \
@@ -67,7 +68,7 @@ ifeq ($(GL),1)
 endif
 
 # Libraries
-KOS_LIBS +=  -lSDL -lfastmem -lm 
+KOS_LIBS +=   -lfastmem -lm 
 
 ifeq ($(GL),1)
     KOS_LIBS += -lGL
@@ -217,7 +218,8 @@ PLATFORM_OBJS = $(BUILDDIR)/port_platform_unix.o
 ALL_OBJS = $(CLIENT_OBJS) $(GAME_OBJS) $(REF_SOFT_OBJS) $(REF_SOFT_SDL_OBJS) $(REF_GL_OBJS) $(NET_OBJS) $(SOUND_OBJS) $(PLATFORM_OBJS)
 
 $(TARGET): createdirs $(ALL_OBJS)
-	$(CC) $(CFLAGS) -o $@ $(ALL_OBJS) $(KOS_LIBS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(ALL_OBJS) $(KOS_LIBS)
+
 
 createdirs:
 	mkdir -p $(BUILDDIR) \

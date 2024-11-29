@@ -19,7 +19,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "qcommon.h"
-#include <kos.h>
 // define this to dissalow any data but the demo pak file
 //#define	NO_ADDONS
 
@@ -226,7 +225,6 @@ int FS_FOpenFile (char *filename, FILE **file)
             if (*file)
             {       
                 Com_DPrintf ("link file: %s\n",netpath);
-			    malloc_stats(); // Add here
 
                 return FS_filelength (*file);
             }
@@ -237,13 +235,11 @@ int FS_FOpenFile (char *filename, FILE **file)
     // search through the path, one element at a time
     for (search = fs_searchpaths ; search ; search = search->next)
     {
-        printf("DEBUG: Searching in path: %s\n", search->filename);
         
         // is the element a pak file?
         if (search->pack)
         {
             pak = search->pack;
-            printf("DEBUG: Checking pak file: %s\n", pak->filename);
             for (i=0 ; i<pak->numfiles ; i++)
                 if (!Q_strcasecmp (pak->files[i].name, filename))
                 {   // found it!
@@ -254,7 +250,6 @@ int FS_FOpenFile (char *filename, FILE **file)
                     if (!*file)
                         Com_Error (ERR_FATAL, "Couldn't reopen %s", pak->filename);    
                     fseek (*file, pak->files[i].filepos, SEEK_SET);
-				malloc_stats(); // Add here
 
                     return pak->files[i].filelen;
                 }
