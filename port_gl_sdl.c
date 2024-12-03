@@ -61,6 +61,7 @@ void checkAndDisplayRamStatus(void) {
                getFreeRam() / (1024.0 * 1024.0),
                getUsedRam() / (1024.0 * 1024.0));
         lastRamCheck = currentTime;
+        malloc_stats();
     }
 }
 // Quake 2 interface functions remain the same
@@ -212,7 +213,6 @@ int main(int argc, char **argv) {
 
         Quake2_Frame(time);
         checkAndDisplayRamStatus();  // Check RAM every 5 seconds
-        
         oldtime = newtime;
         thd_pass();
     }

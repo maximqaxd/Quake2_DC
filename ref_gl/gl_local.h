@@ -25,9 +25,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #pragma warning(disable : 4051)     // ALPHA
 #endif
 
-#ifdef _WIN32
-#  include <windows.h>
-#endif
+ 
 
 #include <stdio.h>
 #include <ctype.h>
@@ -47,7 +45,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 
 
-#include <math.h>
 
 #ifndef GL_COLOR_INDEX8_EXT
 #define GL_COLOR_INDEX8_EXT GL_COLOR_INDEX
@@ -120,6 +117,9 @@ typedef struct image_s
 #define	TEXNUM_IMAGES		1153
 
 #define		MAX_GLTEXTURES	512
+
+
+
 
 //===================================================================
 

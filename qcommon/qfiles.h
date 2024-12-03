@@ -404,7 +404,7 @@ typedef struct
 	unsigned short	v[2];		// vertex numbers
 } dedge_t;
 
-#define	MAXLIGHTMAPS	4
+#define	MAXLIGHTMAPS	4  // being fucked somehow setting it to 1 will make it look less shit but lose lightmap data
 typedef struct
 {
 	unsigned short	planenum;

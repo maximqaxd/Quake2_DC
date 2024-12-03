@@ -45,7 +45,7 @@ qboolean NET_GetLoopPacket(netsrc_t sock, netadr_t* net_from, sizebuf_t* net_mes
 	i = loop->get & (MAX_LOOPBACK - 1);
 	loop->get++;
 
-	memcpy_fast(net_message->data, loop->msgs[i].data, loop->msgs[i].datalen);
+	memcpy(net_message->data, loop->msgs[i].data, loop->msgs[i].datalen);
 	net_message->cursize = loop->msgs[i].datalen;
 	*net_from = net_local_adr;
 	return true;

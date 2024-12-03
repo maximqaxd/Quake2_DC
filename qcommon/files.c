@@ -212,7 +212,6 @@ int FS_FOpenFile (char *filename, FILE **file)
 
     file_from_pak = 0;
 
-    printf("DEBUG: Attempting to open file: %s\n", filename);
 
     // check for links first
     for (link = fs_links ; link ; link=link->next)
@@ -220,11 +219,9 @@ int FS_FOpenFile (char *filename, FILE **file)
         if (!strncmp (filename, link->from, link->fromlength))
         {
             Com_sprintf (netpath, sizeof(netpath), "%s%s",link->to, filename+link->fromlength);
-            printf("DEBUG: Checking link path: %s\n", netpath);
             *file = fopen (netpath, "rb");
             if (*file)
             {       
-                Com_DPrintf ("link file: %s\n",netpath);
 
                 return FS_filelength (*file);
             }
@@ -243,7 +240,6 @@ int FS_FOpenFile (char *filename, FILE **file)
             for (i=0 ; i<pak->numfiles ; i++)
                 if (!Q_strcasecmp (pak->files[i].name, filename))
                 {   // found it!
-                    printf("DEBUG: Found file in pak: %s\n", filename);
                     file_from_pak = 1;
                     Com_DPrintf ("PackFile: %s : %s\n",pak->filename, filename);
                     *file = fopen (pak->filename, "rb");
@@ -257,14 +253,12 @@ int FS_FOpenFile (char *filename, FILE **file)
         else
         {       
             Com_sprintf (netpath, sizeof(netpath), "%s/%s",search->filename, filename);
-            printf("DEBUG: Trying path: %s\n", netpath);
             
             *file = fopen (netpath, "rb");
             if (!*file)
                 continue;
             
             Com_DPrintf ("FindFile: %s\n",netpath);
-		malloc_stats(); // Add here
 
             return FS_filelength (*file);
         }

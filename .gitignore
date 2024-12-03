@@ -10,3 +10,6 @@ cd/1ST_READ.BIN
 quake2.elf
 quake2.cdi
 output.map
+amap
+header.iso
+bootfile.bin
