@@ -98,13 +98,13 @@ void Sys_Error (char *error, ...)
 // change stdin to non blocking
     //fcntl (0, F_SETFL, fcntl (0, F_GETFL, 0) & ~FNDELAY);
 
-	CL_Shutdown ();
-	Qcommon_Shutdown ();
-    
-    va_start (argptr,error);
+	va_start (argptr,error);
     vsprintf (string,error,argptr);
     va_end (argptr);
 	fprintf(stderr, "Error: %s\n", string);
+
+	CL_Shutdown ();
+	Qcommon_Shutdown ();
 
 	_Exit (1);
 
