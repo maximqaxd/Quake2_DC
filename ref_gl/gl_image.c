@@ -441,6 +441,9 @@ int	scrap_uploads;
 
 void Scrap_Upload(void)
 {
+    unsigned trans[BLOCK_WIDTH * BLOCK_HEIGHT];
+    int i;
+
     scrap_uploads++;
     GL_Bind(TEXNUM_SCRAPS);
     
@@ -448,16 +451,31 @@ void Scrap_Upload(void)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     
-    /* Disable mipmapping for scrap textures */
+    /* Convert 8-bit indices to 32-bit RGBA */
+    for (i = 0; i < BLOCK_WIDTH * BLOCK_HEIGHT; i++)
+    {
+        byte p = scrap_texels[0][i];
+        if (p == 255)  // Transparent index
+        {
+            trans[i] = 0;  // Fully transparent
+        }
+        else
+        {
+            trans[i] = d_8to24table[p];
+            trans[i] |= 0xff000000;  // Fully opaque
+        }
+    }
+
+    /* Upload as RGBA */
     glTexImage2D(GL_TEXTURE_2D, 
                  0, 
-                 GL_COLOR_INDEX8_EXT,
+                 GL_RGBA,  // Changed from GL_COLOR_INDEX8_EXT
                  BLOCK_WIDTH, 
                  BLOCK_HEIGHT,
                  0,
-                 GL_COLOR_INDEX,
+                 GL_RGBA,  // Changed from GL_COLOR_INDEX
                  GL_UNSIGNED_BYTE,
-                 scrap_texels[0]);
+                 trans);
                  
     scrap_dirty = false;
 }
@@ -1032,33 +1050,36 @@ qboolean GL_Upload8(byte *data, int width, int height, qboolean mipmap, qboolean
     int new_size;
     static byte *scaled = NULL;
     static int scaled_size = 0;
+    static byte *rgba = NULL;
+    static int rgba_size = 0;
     qboolean is_hud;
     int miplevel;
     int mipsize;
     int x, y;
     
-    /* Detect HUD elements specifically by their 24x24 dimension */
-    is_hud = (width == 24 && height == 24);
+    /* Debug output */
+    ri.Con_Printf(PRINT_ALL, "GL_Upload8: %dx%d mipmap=%d sky=%d\n", 
+                 width, height, mipmap, is_sky);
+    
+    /* Detect HUD elements - any non-mipmapped, non-sky texture */
+    is_hud = (!mipmap && !is_sky);
+    
+    /* Calculate power-of-2 dimensions */
+    while(scaled_width < width) 
+        scaled_width <<= 1;
+    while(scaled_height < height) 
+        scaled_height <<= 1;
+        
+    if (!is_sky && !is_hud) {
+        if (scaled_width > 128) 
+            scaled_width = 128;
+        if (scaled_height > 128) 
+            scaled_height = 128;
+    }
     
     if (is_hud) {
-        /* For HUD elements, use exact dimensions - no scaling */
-        scaled_width = width;
-        scaled_height = height;
-        mipmap = false;
-    } else {
-        /* For everything else, calculate power-of-2 dimensions */
-        while(scaled_width < width) 
-            scaled_width <<= 1;
-        while(scaled_height < height) 
-            scaled_height <<= 1;
-            
-        /* Only reduce world textures */
-        if (!is_sky) {
-            if (scaled_width > 128) 
-                scaled_width = 128;
-            if (scaled_height > 128) 
-                scaled_height = 128;
-        }
+        ri.Con_Printf(PRINT_ALL, "Processing as HUD element %dx%d -> %dx%d\n", 
+                     width, height, scaled_width, scaled_height);
     }
     
     /* Allocate or reuse scaling buffer */
@@ -1073,80 +1094,120 @@ qboolean GL_Upload8(byte *data, int width, int height, qboolean mipmap, qboolean
         }
         scaled_size = new_size;
     }
+
+    /* Allocate or reuse RGBA buffer */
+    if (rgba_size < new_size * 4) {
+        if (rgba) 
+            free(rgba);
+        rgba = malloc(new_size * 4);
+        if (!rgba) {
+            ri.Con_Printf(PRINT_ALL, "GL_Upload8: out of memory for RGBA\n");
+            return false;
+        }
+        rgba_size = new_size * 4;
+    }
     
+    /* Scale the texture to power-of-2 dimensions */
+    for(y = 0; y < scaled_height; y++) {
+        int src_y = (y * height) / scaled_height;
+        for(x = 0; x < scaled_width; x++) {
+            int src_x = (x * width) / scaled_width;
+            scaled[y * scaled_width + x] = data[src_y * width + src_x];
+        }
+    }
+
     if (is_hud) {
-        /* Direct copy for HUD elements - no scaling needed */
-        memcpy(scaled, data, width * height);
-        
+        /* Convert to RGBA with proper alpha */
+		int i;
+
+        for (i = 0; i < new_size; i++) {
+            byte p = scaled[i];
+            unsigned color = d_8to24table[p];
+            
+            if (p == 255) {  // Transparent pixel
+                rgba[i*4+0] = 0;    // R
+                rgba[i*4+1] = 0;    // G
+                rgba[i*4+2] = 0;    // B
+                rgba[i*4+3] = 0;    // A (transparent)
+            } else {
+                rgba[i*4+0] = (color >> 0)  & 0xFF;  // R
+                rgba[i*4+1] = (color >> 8)  & 0xFF;  // G
+                rgba[i*4+2] = (color >> 16) & 0xFF;  // B
+                rgba[i*4+3] = 0xFF;                  // A (opaque)
+            }
+        }
+
         /* Force nearest neighbor filtering for crisp HUD */
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+        /* Enable blending */
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        /* Upload as RGBA */
+        glTexImage2D(GL_TEXTURE_2D, 
+                    0, 
+                    4,           // Changed to 4 for RGBA
+                    scaled_width, 
+                    scaled_height,
+                    0,
+                    GL_RGBA,
+                    GL_UNSIGNED_BYTE,
+                    rgba);
     } else {
-        /* Normal scaling for world textures */
-        if (width != scaled_width || height != scaled_height) {
-            for(y = 0; y < scaled_height; y++) {
-                int src_y = (y * height) / scaled_height;
-                for(x = 0; x < scaled_width; x++) {
-                    int src_x = (x * width) / scaled_width;
-                    scaled[y * scaled_width + x] = data[src_y * width + src_x];
-                }
-            }
-        } else {
-            memcpy(scaled, data, width * height);
-        }
-        
         /* Use specified filtering for world textures */
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, 
                        mipmap ? gl_filter_min : gl_filter_max);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_filter_max);
-    }
+
+        /* Upload as color indexed */
+        glTexImage2D(GL_TEXTURE_2D, 
+                    0, 
+                    GL_COLOR_INDEX8_EXT,
+                    scaled_width, 
+                    scaled_height,
+                    0,
+                    GL_COLOR_INDEX,
+                    GL_UNSIGNED_BYTE,
+                    scaled);
     
-    /* Upload base texture */
-    glTexImage2D(GL_TEXTURE_2D, 
-                 0, 
-                 GL_COLOR_INDEX8_EXT,
-                 scaled_width, 
-                 scaled_height,
-                 0,
-                 GL_COLOR_INDEX,
-                 GL_UNSIGNED_BYTE,
-                 scaled);
-    
-    /* Only generate mipmaps for world textures */
-    if(mipmap && !is_hud && scaled_width == scaled_height) {
-        miplevel = 0;
-        mipsize = scaled_width;
-        
-        while(mipsize > 1) {
-            for(y = 0; y < mipsize/2; y++) {
-                for(x = 0; x < mipsize/2; x++) {
-                    byte p1 = scaled[y*2*mipsize + x*2];
-                    byte p2 = scaled[y*2*mipsize + x*2 + 1];
-                    byte p3 = scaled[(y*2+1)*mipsize + x*2];
-                    byte p4 = scaled[(y*2+1)*mipsize + x*2 + 1];
-                    scaled[y*(mipsize/2) + x] = (p1 + p2 + p3 + p4) >> 2;
+        /* Only generate mipmaps for world textures */
+        if(mipmap && scaled_width == scaled_height) {
+            miplevel = 0;
+            mipsize = scaled_width;
+            
+            while(mipsize > 1) {
+                for(y = 0; y < mipsize/2; y++) {
+                    for(x = 0; x < mipsize/2; x++) {
+                        byte p1 = scaled[y*2*mipsize + x*2];
+                        byte p2 = scaled[y*2*mipsize + x*2 + 1];
+                        byte p3 = scaled[(y*2+1)*mipsize + x*2];
+                        byte p4 = scaled[(y*2+1)*mipsize + x*2 + 1];
+                        scaled[y*(mipsize/2) + x] = (p1 + p2 + p3 + p4) >> 2;
+                    }
                 }
+                
+                mipsize >>= 1;
+                miplevel++;
+                
+                glTexImage2D(GL_TEXTURE_2D,
+                            miplevel,
+                            GL_COLOR_INDEX8_EXT, 
+                            mipsize,
+                            mipsize,
+                            0,
+                            GL_COLOR_INDEX,
+                            GL_UNSIGNED_BYTE,
+                            scaled);
             }
-            
-            mipsize >>= 1;
-            miplevel++;
-            
-            glTexImage2D(GL_TEXTURE_2D,
-                        miplevel,
-                        GL_COLOR_INDEX8_EXT, 
-                        mipsize,
-                        mipsize,
-                        0,
-                        GL_COLOR_INDEX,
-                        GL_UNSIGNED_BYTE,
-                        scaled);
         }
     }
     
     upload_width = scaled_width;
     upload_height = scaled_height;
     
-    return false;
+    return is_hud;
 }
 /*
 ================
