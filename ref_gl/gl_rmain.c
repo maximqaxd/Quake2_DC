@@ -1022,7 +1022,7 @@ void R_Register( void )
     // Enables entity shadow rendering
     gl_shadows = ri.Cvar_Get ("gl_shadows", "1", CVAR_ARCHIVE );
     // Enables dynamic lighting
-    gl_dynamic = ri.Cvar_Get ("gl_dynamic", "1", 0);
+    gl_dynamic = ri.Cvar_Get ("gl_dynamic", "0", 0);
     // Disables texture binding (debug feature)
     gl_nobind = ri.Cvar_Get ("gl_nobind", "0", 0);
     // Rounds texture dimensions down to nearest power of 2
